@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { install_globals, recorded } from "./stubs.js";
 
 install_globals();
-const pos = await import("../frappe_paystack/public/js/paystack_pos.bundle.js");
+const pos = await import("../frappe_paystack/public/js/erpnext/paystack_pos.bundle.js");
 
 const on_charge_url = recorded.realtime["paystack_pos_charge_url"];
 

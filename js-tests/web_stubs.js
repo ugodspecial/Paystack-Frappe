@@ -6,14 +6,9 @@ import path from "node:path";
 import { vi } from "vitest";
 
 // Paths resolve from the package root, which readFileSync opens under jsdom.
-const CHECKOUT_SOURCE = fs.readFileSync(
-	path.resolve(process.cwd(), "frappe_paystack/public/js/paystack_checkout.js"),
-	"utf8"
-);
-
 // Read off disk, so each test evaluates it afresh.
 const CART_GUARD_SOURCE = fs.readFileSync(
-	path.resolve(process.cwd(), "frappe_paystack/public/js/paystack_cart_guard.bundle.js"),
+	path.resolve(process.cwd(), "frappe_paystack/public/js/erpnext/paystack_cart_guard.bundle.js"),
 	"utf8"
 );
 
@@ -34,14 +29,6 @@ const SETTLEMENTS_REPORT_SOURCE = fs.readFileSync(
 	"utf8"
 );
 
-const ACTIVITY_REPORT_SOURCE = fs.readFileSync(
-	path.resolve(
-		process.cwd(),
-		"frappe_paystack/frappe_paystack/report/paystack_activity/paystack_activity.js"
-	),
-	"utf8"
-);
-
 // The three form scripts hooks.py registers as doctype_js, read off disk the same way.
 const FORM_SCRIPT_SOURCES = {};
 Object.entries({
@@ -50,7 +37,7 @@ Object.entries({
 	"Sales Order": "sales_order.js",
 }).forEach(([doctype, file]) => {
 	FORM_SCRIPT_SOURCES[doctype] = fs.readFileSync(
-		path.resolve(process.cwd(), `frappe_paystack/public/js/${file}`),
+		path.resolve(process.cwd(), `frappe_paystack/public/js/erpnext/${file}`),
 		"utf8"
 	);
 });
@@ -203,35 +190,6 @@ class DialogStub {
 	}
 }
 
-/** Evaluate the checkout page bundle and return its Vue component options. */
-export function load_checkout(payload) {
-	document.body.innerHTML =
-		payload === undefined
-			? ""
-			: `<div id="paystack-checkout"></div><script type="application/json" id="paystack-checkout-data">${
-					typeof payload === "string" ? payload : JSON.stringify(payload)
-			  }</script>`;
-
-	let captured = null;
-	globalThis.Vue = {
-		createApp: (options) => {
-			captured = options;
-			return { mount: vi.fn() };
-		},
-	};
-	globalThis.PaystackPop = function PaystackPop() {
-		return {
-			newTransaction: (options) => {
-				recorded.paystack = options;
-			},
-		};
-	};
-
-	// eslint-disable-next-line no-new-func
-	new Function(CHECKOUT_SOURCE)();
-	return captured;
-}
-
 /** Give the page a clipboard API that records writes. */
 export function install_clipboard(rejection) {
 	navigator.clipboard = {
@@ -273,23 +231,6 @@ export function load_settlements_report(company = "Test Company") {
 	// eslint-disable-next-line no-new-func
 	new Function(SETTLEMENTS_REPORT_SOURCE)();
 	return globalThis.frappe.query_reports["Paystack Settlements vs Ledger"];
-}
-
-// The date the activity report's stub clock reports as today.
-export const TODAY = "2026-08-02";
-
-/** Evaluate the activity report script and return what it registered. */
-export function load_activity_report(company = "Test Company") {
-	globalThis.frappe.query_reports = {};
-	globalThis.frappe.defaults = { get_user_default: () => company };
-	globalThis.frappe.datetime = {
-		get_today: () => TODAY,
-		add_days: (date, days) => `${date}${days >= 0 ? "+" : ""}${days}`,
-	};
-
-	// eslint-disable-next-line no-new-func
-	new Function(ACTIVITY_REPORT_SOURCE)();
-	return globalThis.frappe.query_reports["Paystack Activity"];
 }
 
 /** Evaluate a doctype's form script against a stubbed action bundle, returning its handlers. */

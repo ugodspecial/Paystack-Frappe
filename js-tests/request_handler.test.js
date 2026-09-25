@@ -9,7 +9,7 @@ import {
 } from "./stubs.js";
 
 install_globals();
-const pos = await import("../frappe_paystack/public/js/paystack_pos.bundle.js");
+const pos = await import("../frappe_paystack/public/js/erpnext/paystack_pos.bundle.js");
 
 async function flush() {
 	for (let index = 0; index < 8; index++) {

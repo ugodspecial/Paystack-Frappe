@@ -1,193 +1,150 @@
-// The public checkout page: which checkout it opens, and what a closed link says.
+import fs from "node:fs";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { beforeEach, describe, expect, it } from "vitest";
-import {
-	checkout_payload,
-	flush,
-	install_web_globals,
-	load_checkout,
-	make_instance,
-	recorded,
-	replies,
-} from "./web_stubs.js";
+const SOURCE = fs.readFileSync(path.resolve(process.cwd(), "frappe_paystack/public/js/paystack_checkout.js"), "utf8");
 
-const VALIDATE = "frappe_paystack.api.validate_payment_link";
-const HOSTED = "frappe_paystack.api.start_hosted_checkout";
+let calls;
+let replies;
+let popup;
+let redirect;
 
-function mount(overrides = {}) {
-	const payload = checkout_payload(overrides);
-	replies[VALIDATE] = payload;
-	return make_instance(load_checkout(payload));
+function mount(payload, withEmail = false) {
+	document.body.innerHTML = `
+		<div id="ps-feedback" hidden></div>
+		${withEmail ? '<input id="ps-email">' : ""}
+		<button id="ps-pay">Pay</button>
+		<script type="application/json" id="paystack-checkout-data">${JSON.stringify(payload)}</script>`;
+	new Function(SOURCE)(); // eslint-disable-line no-new-func
 }
 
-describe("checkout page bootstrap", () => {
-	beforeEach(() => {
-		install_web_globals();
-	});
+function click() {
+	document.getElementById("ps-pay").click();
+}
 
-	it("mounts nothing when the page carries no payload", () => {
-		expect(load_checkout()).toBeNull();
-	});
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-	it("mounts nothing when the payload is not JSON", () => {
-		expect(load_checkout("{not json")).toBeNull();
-	});
-
-	it("mounts the app for a real payload", () => {
-		expect(load_checkout(checkout_payload())).not.toBeNull();
-	});
-});
-
-describe("inline checkout", () => {
-	beforeEach(() => {
-		install_web_globals();
-	});
-
-	it("opens the Paystack popup with the amount in minor units", async () => {
-		const app = mount();
-
-		await app.startPayment();
-		await flush();
-
-		expect(recorded.paystack.amount).toBe(100000);
-		expect(recorded.paystack.reference).toBe("PSLOG-1");
-		expect(recorded.redirect).toBe("");
-	});
-
-	it("sends the metadata the webhook resolves the payment through", async () => {
-		const app = mount();
-
-		await app.startPayment();
-		await flush();
-
-		expect(recorded.paystack.metadata.reference).toBe("PSLOG-1");
-		expect(recorded.paystack.metadata.reference_docname).toBe("ACC-SINV-0001");
-	});
-
-	it("stops when the link was paid in another tab", async () => {
-		const app = mount();
-		replies[VALIDATE] = checkout_payload({ status: "Processed", is_payable: false });
-
-		await app.startPayment();
-		await flush();
-
-		expect(recorded.paystack).toBeNull();
-		expect(app.feedback.tone).toBe("warning");
-		expect(app.busy).toBe(false);
-	});
-
-	it("reports a server it could not reach", async () => {
-		const app = mount();
-		globalThis.frappe.call = () => Promise.reject(new Error("offline"));
-
-		await app.startPayment();
-		await flush();
-
-		expect(app.feedback.tone).toBe("danger");
-		expect(app.busy).toBe(false);
-	});
-
-	it("refuses to submit without a valid email", async () => {
-		const app = mount({ email: "" });
-		app.email = "not-an-email";
-
-		await app.startPayment();
-		await flush();
-
-		expect(app.emailTouched).toBe(true);
-		expect(recorded.paystack).toBeNull();
+beforeEach(() => {
+	vi.useRealTimers();
+	calls = [];
+	replies = {};
+	popup = null;
+	redirect = "";
+	globalThis.__ = (text, args) => (args || []).reduce((out, value, index) => out.replace(`{${index}}`, value), text);
+	globalThis.frappe = {
+		call: (options) => {
+			calls.push({ method: options.method, args: options.args, type: options.type });
+			const reply = replies[options.method];
+			if (reply instanceof Error) {
+				options.error(reply);
+			} else {
+				options.callback({ message: typeof reply === "function" ? reply(options.args) : reply });
+			}
+		},
+	};
+	globalThis.PaystackPop = function PaystackPop() {
+		return {
+			resumeTransaction: (accessCode, callbacks) => {
+				popup = { accessCode, callbacks };
+			},
+		};
+	};
+	Object.defineProperty(window, "location", {
+		configurable: true,
+		writable: true,
+		value: {
+			set href(url) {
+				redirect = url;
+			},
+			get href() {
+				return redirect;
+			},
+			reload: vi.fn(),
+		},
 	});
 });
 
-describe("hosted checkout", () => {
-	beforeEach(() => {
-		install_web_globals();
-	});
-
-	it("redirects to the page Paystack opened", async () => {
-		const app = mount({ checkout_mode: "Hosted" });
-		replies[HOSTED] = "https://checkout.paystack.com/abc";
-
-		await app.startPayment();
-		await flush();
-
-		expect(recorded.redirect).toBe("https://checkout.paystack.com/abc");
-		expect(recorded.paystack).toBeNull();
-	});
-
-	it("sends the email the customer typed", async () => {
-		const app = mount({ checkout_mode: "Hosted", email: "" });
-		replies[HOSTED] = "https://checkout.paystack.com/abc";
-		app.email = "typed@example.com";
-
-		await app.startPayment();
-		await flush();
-
-		const [, args] = globalThis.frappe.call.mock.calls.at(-1);
-		expect(args).toEqual({ reference: "PSLOG-1", email: "typed@example.com" });
-	});
-
-	it("reports a checkout Paystack would not open", async () => {
-		const app = mount({ checkout_mode: "Hosted" });
-		replies[HOSTED] = null;
-
-		await app.startPayment();
-		await flush();
-
-		expect(recorded.redirect).toBe("");
-		expect(app.feedback.tone).toBe("danger");
-		expect(app.busy).toBe(false);
-	});
-
-	it("reports a server it could not reach", async () => {
-		const app = mount({ checkout_mode: "Hosted" });
-		globalThis.frappe.call = (method) =>
-			method === HOSTED
-				? Promise.reject(new Error("offline"))
-				: Promise.resolve({ message: checkout_payload({ checkout_mode: "Hosted" }) });
-
-		await app.startPayment();
-		await flush();
-
-		expect(recorded.redirect).toBe("");
-		expect(app.feedback.tone).toBe("danger");
-	});
+afterEach(() => {
+	delete globalThis.PaystackPop;
 });
 
-describe("closed checkouts", () => {
-	beforeEach(() => {
-		install_web_globals();
+describe("checkout page", () => {
+	it("asks for a valid email before starting", async () => {
+		mount({ reference: "S1", needs_email: true, email: "" }, true);
+		document.getElementById("ps-email").value = "not-an-email";
+		click();
+		await flush();
+		expect(calls).toHaveLength(0);
+		expect(document.getElementById("ps-feedback").hidden).toBe(false);
 	});
 
-	it("says an expired link has expired", () => {
-		const app = mount({ is_expired: true, is_payable: false });
+	it("starts on the server and resumes the transaction inline", async () => {
+		replies["frappe_paystack.api.start_checkout"] = { mode: "Inline", access_code: "ac_S1", reference: "S1" };
+		replies["frappe_paystack.api.verify_checkout"] = { status: "Paid", redirect: "/payment-success?x=1" };
+		mount({ reference: "S1", needs_email: false, email: "payer@example.com" });
+		click();
+		await flush();
 
-		expect(app.canPay).toBe(false);
-		expect(app.closedReason).toMatch(/expired/i);
+		expect(calls[0]).toEqual({
+			method: "frappe_paystack.api.start_checkout",
+			args: { reference: "S1", email: "payer@example.com" },
+			type: "POST",
+		});
+		// The browser never sends an amount, currency or reference of its own.
+		expect(Object.keys(calls[0].args)).toEqual(["reference", "email"]);
+		expect(popup.accessCode).toBe("ac_S1");
+
+		popup.callbacks.onSuccess({ reference: "S1" });
+		await flush();
+		expect(calls[1].method).toBe("frappe_paystack.api.verify_checkout");
+		expect(calls[1].args.transaction_reference).toBe("S1");
+		expect(redirect).toBe("/payment-success?x=1");
 	});
 
-	it("says a paid link is paid, even once it has also expired", () => {
-		const app = mount({ status: "Completed", is_expired: true, is_payable: false });
-
-		expect(app.closedReason).toMatch(/already been completed/i);
+	it("redirects to Paystack in hosted mode", async () => {
+		replies["frappe_paystack.api.start_checkout"] = {
+			mode: "Hosted",
+			authorization_url: "https://checkout.paystack.com/ac_S2",
+		};
+		mount({ reference: "S2", needs_email: false, email: "payer@example.com" });
+		click();
+		await flush();
+		expect(redirect).toBe("https://checkout.paystack.com/ac_S2");
+		expect(popup).toBeNull();
 	});
 
-	it("says a capture the merchant gave up on is already paid", () => {
-		const app = mount({ status: "Needs Attention", is_payable: false });
-
-		expect(app.canPay).toBe(false);
-		expect(app.closedReason).toMatch(/already been completed/i);
+	it("re-enables the button when the payer cancels", async () => {
+		replies["frappe_paystack.api.start_checkout"] = { mode: "Inline", access_code: "ac_S3", reference: "S3" };
+		mount({ reference: "S3", needs_email: false, email: "payer@example.com" });
+		click();
+		await flush();
+		popup.callbacks.onCancel();
+		expect(document.getElementById("ps-pay").disabled).toBe(false);
+		expect(document.getElementById("ps-feedback").textContent).toContain("cancelled");
 	});
 
-	it("says a cancelled document cannot be paid", () => {
-		const app = mount({ order_docstatus: 2, is_payable: false });
-
-		expect(app.closedReason).toMatch(/no longer active/i);
+	it("reports a failed verification without redirecting", async () => {
+		replies["frappe_paystack.api.start_checkout"] = { mode: "Inline", access_code: "ac_S4", reference: "S4" };
+		replies["frappe_paystack.api.verify_checkout"] = { status: "Failed", redirect: null };
+		mount({ reference: "S4", needs_email: false, email: "payer@example.com" });
+		click();
+		await flush();
+		popup.callbacks.onSuccess({ reference: "S4" });
+		await flush();
+		expect(redirect).toBe("");
+		expect(document.getElementById("ps-feedback").textContent).toContain("not successful");
 	});
 
-	it("says a settled document is settled", () => {
-		const app = mount({ is_payable: false });
-
-		expect(app.closedReason).toMatch(/settled/i);
+	it("falls back to the hosted page when the Paystack script is unavailable", async () => {
+		delete globalThis.PaystackPop;
+		replies["frappe_paystack.api.start_checkout"] = {
+			mode: "Inline",
+			access_code: "ac_S5",
+			authorization_url: "https://checkout.paystack.com/ac_S5",
+		};
+		mount({ reference: "S5", needs_email: false, email: "payer@example.com" });
+		click();
+		await flush();
+		expect(redirect).toBe("https://checkout.paystack.com/ac_S5");
 	});
 });

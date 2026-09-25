@@ -3,8 +3,8 @@ name = "frappe_paystack"
 authors = [
     { name = "Anthony Emmanuel", email = "mymi14s@hotmail.com"}
 ]
-description = "Paystack integration for Frappe/ERPNext"
-requires-python = ">=3.10,<3.15"
+description = "Paystack payment gateway for Frappe Payments (ERPNext, LMS and Education optional)"
+requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
 dependencies = [
@@ -16,10 +16,12 @@ requires = ["flit_core >=3.4,<4"]
 build-backend = "flit_core.buildapi"
 
 [tool.bench.frappe-dependencies]
+# One codebase for Frappe version-15, version-16 and develop (17.0.0-dev).
 frappe = ">=15.0.0,<18.0.0"
-erpnext = ">=15.0.0,<17.0.0"
 # payments tags no release series; this floor checks the app is present.
 payments = ">=0.0.1"
+# ERPNext is optional: frappe_paystack.integrations.erpnext activates itself
+# when ERPNext is installed (version-15 and version-16 are tested).
 
 # These dependencies are only installed when developer mode is enabled
 [tool.bench.dev-dependencies]

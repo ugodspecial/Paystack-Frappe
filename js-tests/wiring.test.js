@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { install_globals, make_frm, mount_dom, paystack_row, recorded } from "./stubs.js";
 
 install_globals();
-const pos = await import("../frappe_paystack/public/js/paystack_pos.bundle.js");
+const pos = await import("../frappe_paystack/public/js/erpnext/paystack_pos.bundle.js");
 
 const form_events = { ...recorded.form_events["POS Invoice"] };
 const tender_events = { ...recorded.form_events["Sales Invoice Payment"] };

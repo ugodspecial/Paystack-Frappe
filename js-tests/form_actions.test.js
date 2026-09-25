@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flush, install_web_globals, recorded, replies } from "./web_stubs.js";
 
 install_web_globals();
-await import("../frappe_paystack/public/js/paystack_actions.bundle.js");
+await import("../frappe_paystack/public/js/erpnext/paystack_actions.bundle.js");
 const actions = globalThis.frappe_paystack.actions;
 
 const ENABLED = "frappe_paystack.api.is_enabled_for_company";

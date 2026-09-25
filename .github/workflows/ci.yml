@@ -1,196 +1,205 @@
 name: CI
 
 on:
-  # A branch with an open pull request is covered by the pull_request event.
   push:
-    branches: [version-15, version-16, develop, main]
+    branches: [develop, main, version-15, version-16, "arena/**"]
   pull_request:
   workflow_dispatch:
 
 concurrency:
-  # github.event.number is empty on push; github.ref keeps the branches separate.
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.event.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
-env:
-  # The coverage the report is measured with. .coveragerc is written for this line.
-  # frappe pins coverage ~=6.5.0 on version-15 and ~=7.10.0 on version-16, and both
-  # legs force this version over the pin.
-  COVERAGE_VERSION: '7.15.2'
-
 jobs:
-  linter:
-    name: 'Frappe Linter'
+  static:
+    name: Static checks
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: pip
-
-      # Runs .pre-commit-config.yaml.
-      - uses: pre-commit/action@v3.0.0
-        env:
-          SKIP: no-commit-to-branch
-
-  code-quality:
-    name: 'Code Quality'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-
-      # Versions match the rev pins in .pre-commit-config.yaml.
-      - name: Install tools
-        id: install
+      - name: Compile on the oldest supported interpreter syntax
+        run: python -m compileall -q frappe_paystack
+      - name: Undefined names and syntax errors
         run: |
-          pip install \
-            isort==8.0.1 \
-            black==26.5.1 \
-            flake8==7.3.0 \
-            pylint==4.0.6 \
-            mypy==2.3.0
+          pip install --quiet "ruff==0.6.9"
+          ruff check --select E9,F63,F7,F82 --target-version py310 frappe_paystack .github/scripts
+      - name: Dependency boundary (core never imports ERPNext; required_apps = payments)
+        run: python .github/scripts/check_boundaries.py
+      - name: Merge conflict markers
+        run: |
+          if grep -rIl --exclude-dir=.git --exclude-dir=node_modules '^<<<<<<< ' .; then
+            echo "::error::merge conflict markers found"; exit 1
+          fi
 
-      # Each tool reports independently; the job fails if any step failed.
-      - name: isort
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: isort --check-only --diff .
-
-      - name: black
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: black --check --diff .
-
-      - name: flake8
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: flake8 .
-
-      # ignored-modules in pyproject.toml covers the bench packages.
-      - name: pylint
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: pylint --rcfile=pyproject.toml frappe_paystack
-
-      - name: mypy
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: mypy --config-file=pyproject.toml frappe_paystack
-
-  semgrep:
-    name: 'Semgrep Rules'
+  vitest:
+    name: JavaScript unit tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
-          cache: pip
+          node-version: 22
+      - run: npm ci
+      - run: npm test
 
-      - name: Download Semgrep rules
-        run: git clone --depth 1 https://github.com/frappe/semgrep-rules.git frappe-semgrep-rules
-
-      - name: Run Semgrep rules
-        run: |
-          pip install semgrep
-          semgrep ci --config ./frappe-semgrep-rules/rules --config r/python.lang.correctness
-
-  deps-vulnerable-check:
-    name: 'Vulnerable Dependency Check'
+  server:
+    name: ${{ matrix.env }} (frappe ${{ matrix.frappe }}, Python ${{ matrix.python }})
+    needs: [static]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/*requirements.txt', '**/pyproject.toml', '**/setup.py') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-            ${{ runner.os }}-
-
-      - name: Install and run pip-audit
-        run: |
-          pip install pip-audit
-          cd "${GITHUB_WORKSPACE}"
-          pip-audit --desc on .
-
-  frontend:
-    runs-on: ubuntu-latest
-    name: Frontend
-    timeout-minutes: 30
-    # Skipped when either lint job fails or is cancelled.
-    needs: [linter, code-quality]
-
-    steps:
-      - name: Clone
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          check-latest: true
-          cache: npm
-
-      - name: Install
-        run: npm ci
-
-      - name: Run Vitest
-        run: npm test
-
-  tests:
-    runs-on: ubuntu-latest
-    name: Server (Python ${{ matrix.python }}, frappe ${{ matrix.frappe }})
     timeout-minutes: 90
-    # The bench build and the server suite start only after both lint jobs pass.
-    needs: [linter, code-quality]
-
     strategy:
-      # Each pair reports on its own; one red leg leaves the other running.
       fail-fast: false
       matrix:
-        # The interpreter is paired with the framework branch, not crossed with it.
-        # frappe version-15 declares requires-python >=3.10,<3.15; frappe
-        # version-16 declares >=3.14,<3.15.
         include:
-          - python: '3.12'
+          # E1: Frappe + Payments + frappe_paystack. No ERPNext anywhere.
+          - env: core
             frappe: version-15
-            erpnext: version-15
             payments: version-15
-            webshop: version-15
-          - python: '3.14'
+            python: '3.12'
+            node: 18
+            mariadb: '10.6'
+            extra_apps: ''
+            expect_apps: frappe payments frappe_paystack
+          - env: core
             frappe: version-16
-            erpnext: version-16
             payments: version-16
-            webshop: version-16
+            python: '3.14'
+            node: 24
+            mariadb: '11.8'
+            extra_apps: ''
+            expect_apps: frappe payments frappe_paystack
+          - env: core
+            frappe: develop
+            payments: develop
+            python: '3.14'
+            node: 24
+            mariadb: '11.8'
+            extra_apps: ''
+            expect_apps: frappe payments frappe_paystack
+          # E2: + LMS (still no ERPNext).
+          - env: lms
+            frappe: version-15
+            payments: version-15
+            python: '3.12'
+            node: 18
+            mariadb: '10.6'
+            extra_apps: lms@version-15
+            expect_apps: frappe payments lms frappe_paystack
+          - env: lms
+            frappe: version-16
+            payments: version-16
+            python: '3.14'
+            node: 24
+            mariadb: '11.8'
+            extra_apps: lms@version-16
+            expect_apps: frappe payments lms frappe_paystack
+          - env: lms
+            frappe: develop
+            payments: develop
+            python: '3.14'
+            node: 24
+            mariadb: '11.8'
+            extra_apps: lms@develop
+            expect_apps: frappe payments lms frappe_paystack
+          # E3 + E4: ERPNext (+ Webshop) + Education.
+          - env: erpnext
+            frappe: version-15
+            payments: version-15
+            python: '3.12'
+            node: 18
+            mariadb: '10.6'
+            extra_apps: erpnext@version-15 webshop@version-15 education@version-15.2
+            expect_apps: frappe payments erpnext webshop education frappe_paystack
+          - env: erpnext
+            frappe: version-16
+            payments: version-16
+            python: '3.14'
+            node: 24
+            mariadb: '11.8'
+            extra_apps: erpnext@version-16 webshop@version-16 education@version-16
+            expect_apps: frappe payments erpnext webshop education frappe_paystack
 
-    # bench reads CI when it renders the Procfile.
     env:
       CI: 'Yes'
       FRAPPE_BRANCH: ${{ matrix.frappe }}
-      ERPNEXT_BRANCH: ${{ matrix.erpnext }}
       PAYMENTS_BRANCH: ${{ matrix.payments }}
-      WEBSHOP_BRANCH: ${{ matrix.webshop }}
-      PYTHON_VERSION: ${{ matrix.python }}
-      # bench get-app runs yarn install, which would download the Cypress binary.
+      EXTRA_APPS: ${{ matrix.extra_apps }}
       CYPRESS_INSTALL_BINARY: '0'
 
+    services:
+      redis-cache:
+        image: redis:alpine
+        ports:
+          - 13000:6379
+      redis-queue:
+        image: redis:alpine
+        ports:
+          - 11000:6379
+      mariadb:
+        image: mariadb:${{ matrix.mariadb }}
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized || mariadb-admin ping -proot" --health-interval=5s --health-timeout=5s --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: ${{ matrix.python }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install MariaDB client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+
+      - name: Build bench and install apps
+        env:
+          PYTHON_BIN: ${{ steps.python.outputs.python-path }}
+        run: bash .github/scripts/setup-bench.sh
+
+      - name: Installed apps are exactly ${{ matrix.expect_apps }}
+        run: bash .github/scripts/assert-apps.sh ~/frappe-bench test_site ${{ matrix.expect_apps }}
+
+      - name: Migrate twice (patches and schema sync are idempotent)
+        working-directory: /home/runner/frappe-bench
+        run: |
+          bench --site test_site migrate
+          bench --site test_site migrate
+
+      - name: Run the frappe_paystack suite
+        run: bash .github/scripts/run-tests.sh ~/frappe-bench test_site
+
+      - name: Show bench logs
+        if: ${{ failure() }}
+        run: tail -n 200 /home/runner/frappe-bench/logs/*.log || true
+
+  upgrade:
+    name: Upgrade from upstream 15.5.0 (ERPNext, frappe version-15)
+    needs: [static]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CI: 'Yes'
+      FRAPPE_BRANCH: version-15
+      PAYMENTS_BRANCH: version-15
+      EXTRA_APPS: erpnext@version-15
+      PAYSTACK_SOURCE: https://github.com/mymi14s/frappe_paystack@version-15
+      CYPRESS_INSTALL_BINARY: '0'
     services:
       redis-cache:
         image: redis:alpine
@@ -206,118 +215,39 @@ jobs:
           MARIADB_ROOT_PASSWORD: root
         ports:
           - 3306:3306
-        options: --health-cmd="mariadb-admin ping" --health-interval=5s --health-timeout=2s --health-retries=3
-
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized || mariadb-admin ping -proot" --health-interval=5s --health-timeout=5s --health-retries=20
     steps:
-      - name: Clone
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        id: setup-python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        id: python
         with:
-          python-version: ${{ matrix.python }}
-
-      # Compiles on the interpreter the suite runs on, so it follows setup-python.
-      - name: Check for merge conflicts and syntax errors
-        run: |
-          "${{ steps.setup-python.outputs.python-path }}" -m compileall -q -f "${GITHUB_WORKSPACE}/frappe_paystack"
-          if grep -lr --exclude-dir=node_modules --exclude-dir=.git "^<<<<<<< " "${GITHUB_WORKSPACE}"; then
-            echo "::error::Found merge conflict markers"
-            exit 1
-          fi
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
         with:
-          node-version: 24
-          check-latest: true
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          # The interpreter and the framework branch are in the key, so the two legs
-          # keep separate caches.
-          key: ${{ runner.os }}-py${{ matrix.python }}-${{ matrix.frappe }}-pip-${{ hashFiles('**/*requirements.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
-          restore-keys: |
-            ${{ runner.os }}-py${{ matrix.python }}-${{ matrix.frappe }}-pip-
-            ${{ runner.os }}-py${{ matrix.python }}-${{ matrix.frappe }}-
-
-      - name: Install MariaDB Client
+          node-version: 18
+      - name: Install MariaDB client
         run: |
-          sudo apt update
-          sudo apt-get install -y mariadb-client
-
-      - name: Setup bench
-        run: |
-          pip install frappe-bench
-          # setup-python reports the interpreter it installed; PATH lookups can find another.
-          bench init \
-            --skip-redis-config-generation \
-            --skip-assets \
-            --frappe-branch "${FRAPPE_BRANCH}" \
-            --python "${{ steps.setup-python.outputs.python-path }}" \
-            ~/frappe-bench
-          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
-          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
-
-      # A venv built on another interpreter measures other code, so the run stops here.
-      - name: Check the bench interpreter
-        working-directory: /home/runner/frappe-bench
-        run: |
-          ./env/bin/python -VV
-          FOUND="$(./env/bin/python -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
-          echo "bench venv runs Python ${FOUND}, workflow asked for ${PYTHON_VERSION}"
-          if [ "${FOUND}" != "${PYTHON_VERSION}" ]; then
-            echo "::error::bench built its venv on Python ${FOUND}, not ${PYTHON_VERSION}"
-            exit 1
-          fi
-
-      - name: Install apps
-        working-directory: /home/runner/frappe-bench
-        run: |
-          bench get-app https://github.com/frappe/erpnext --branch "${ERPNEXT_BRANCH}" --resolve-deps
-          # frappe_paystack imports payments.utils.
-          bench get-app https://github.com/frappe/payments --branch "${PAYMENTS_BRANCH}"
-          # The storefront the webshop and portal suites run against.
-          bench get-app https://github.com/frappe/webshop --branch "${WEBSHOP_BRANCH}"
-          # actions/checkout leaves a detached HEAD; the branch names the commit.
-          git -C "${GITHUB_WORKSPACE}" checkout -B ci-run
-          # Installs the checked-out revision.
-          bench get-app frappe_paystack "${GITHUB_WORKSPACE}" --branch ci-run
-          bench setup requirements --dev
-          # frappe's dev dependencies pin coverage below this line on both branches,
-          # and their branch analysis differs; this wins.
-          ./env/bin/pip install --upgrade "coverage==${COVERAGE_VERSION}"
-          FOUND="$(./env/bin/python -c 'import coverage; print(coverage.__version__)')"
-          echo "bench venv runs coverage ${FOUND}"
-          if [ "${FOUND}" != "${COVERAGE_VERSION}" ]; then
-            echo "::error::coverage ${FOUND} is installed, not ${COVERAGE_VERSION}"
-            exit 1
-          fi
-
-      - name: Create site
-        working-directory: /home/runner/frappe-bench
-        run: |
-          bench new-site --set-default --db-root-password root --admin-password admin test_site
-          bench --site test_site install-app erpnext
-          bench --site test_site install-app payments
-          bench --site test_site install-app webshop
-          bench --site test_site install-app frappe_paystack
-          bench --site test_site set-config allow_tests true
-          bench build
-
-      # bench run-tests exits 0 when tests fail, so the wrapper reads the summary line.
-      - name: Run Tests
-        working-directory: /home/runner/frappe-bench
-        run: |
-          bash apps/frappe_paystack/.github/scripts/run-tests-with-coverage.sh \
-            /home/runner/frappe-bench test_site
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+      - name: Install upstream frappe_paystack 15.5.0 with ERPNext
         env:
-          TYPE: server
-
-      - name: Show bench output
-        if: ${{ always() }}
+          PYTHON_BIN: ${{ steps.python.outputs.python-path }}
+        run: bash .github/scripts/setup-bench.sh
+      - name: Seed 15.5.0-shaped data
+        working-directory: /home/runner/frappe-bench/sites
+        run: ../env/bin/python "${GITHUB_WORKSPACE}/.github/scripts/upgrade_seed.py" test_site
+      - name: Switch the app to this commit and migrate
+        working-directory: /home/runner/frappe-bench
         run: |
-          cat /home/runner/frappe-bench/logs/*.log || true
+          git -C "${GITHUB_WORKSPACE}" checkout -B ci-run
+          git -C apps/frappe_paystack fetch "${GITHUB_WORKSPACE}" ci-run
+          git -C apps/frappe_paystack checkout -f FETCH_HEAD
+          find apps/frappe_paystack -name '__pycache__' -type d -prune -exec rm -rf {} +
+          ./env/bin/pip install --quiet -e apps/frappe_paystack
+          bench --site test_site migrate
+      - name: Verify statuses and preserved ERPNext data
+        working-directory: /home/runner/frappe-bench/sites
+        run: ../env/bin/python "${GITHUB_WORKSPACE}/.github/scripts/upgrade_verify.py" test_site
+      - name: Show bench logs
+        if: ${{ failure() }}
+        run: tail -n 200 /home/runner/frappe-bench/logs/*.log || true

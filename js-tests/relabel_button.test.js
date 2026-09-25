@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { install_globals, make_frm, mount_dom, paystack_row } from "./stubs.js";
 
 install_globals();
-const pos = await import("../frappe_paystack/public/js/paystack_pos.bundle.js");
+const pos = await import("../frappe_paystack/public/js/erpnext/paystack_pos.bundle.js");
 
 describe("relabel_button", () => {
 	let dom;
