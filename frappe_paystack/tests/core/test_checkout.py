@@ -39,6 +39,26 @@ class TestPaymentInitialisation(PaystackTestCase):
         self.assertEqual((request.reference_doctype, request.reference_docname), ("ToDo", todo.name))
         self.assertEqual(json.loads(request.data)["payment"], "P1")
 
+    def test_byte_string_kwargs_are_decoded(self):
+        """ERPNext's PaymentRequest.get_payment_url passes title/description/payer_name as bytes."""
+        todo = self.make_todo()
+        url = self.controller().get_payment_url(
+            amount=5000, currency="NGN", title="Paystack Test Co".encode("utf-8"), description="Payment Request".encode(),
+            reference_doctype="ToDo", reference_docname=todo.name, payer_email=LEARNER, payer_name=b"Ada Obi",
+            order_id="PR-0001",
+        )
+        session = self.session(self.session_of(url))
+        self.assertEqual(session.title, "Paystack Test Co")
+        self.assertEqual(session.payer_name, "Ada Obi")
+        self.assertEqual(json.loads(session.request_data)["description"], "Payment Request")
+        # The same call again (ERPNext asks twice) reuses the session.
+        again = self.controller().get_payment_url(
+            amount=5000, currency="NGN", title=b"Paystack Test Co", description=b"Payment Request",
+            reference_doctype="ToDo", reference_docname=todo.name, payer_email=LEARNER, payer_name=b"Ada Obi",
+            order_id="PR-0001",
+        )
+        self.assertEqual(url, again)
+
     def test_same_intent_reuses_the_open_session(self):
         todo = self.make_todo()
         first = self.payment_url(todo, amount=5000, user=LEARNER)

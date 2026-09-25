@@ -17,6 +17,9 @@ class TestStudentApplicant(PaystackTestCase):
     def make_applicant(self):
         applicant = frappe.new_doc("Student Applicant")
         applicant.update({"first_name": "Paystack", "last_name": "Applicant", "student_email_id": "applicant@example.com"})
+        series = frappe.get_meta("Student Applicant").get_field("naming_series")
+        if series and not applicant.get("naming_series"):
+            applicant.naming_series = (series.options or "EDU-APP-.YYYY.-").split("\n")[0]
         # The applicant's own admission rules (register, fee term, ...) are not what is tested here.
         applicant.flags.ignore_validate = True
         applicant.flags.ignore_mandatory = True

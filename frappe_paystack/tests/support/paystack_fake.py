@@ -17,6 +17,8 @@ from contextlib import contextmanager
 from typing import Any, Optional
 from unittest.mock import patch
 
+from frappe.utils import nowdate
+
 from frappe_paystack.core.client import PaystackClient, PaystackResponse
 
 _ids = itertools.count(4_000_000_001)
@@ -136,7 +138,7 @@ class FakePaystack:
         tx = self.transactions[reference]
         tx.update({
             "status": status,
-            "paid_at": "2026-09-25T10:00:00.000Z" if status == "success" else None,
+            "paid_at": f"{nowdate()}T10:00:00.000Z" if status == "success" else None,
             "channel": "card",
             "fees": fees if status == "success" else 0,
             "gateway_response": "Approved" if status == "success" else "Declined",
@@ -178,7 +180,7 @@ class FakePaystack:
             "currency": body["currency"],
             "channel": "card",
             "fees": 100,
-            "paid_at": "2026-09-25T10:00:00.000Z",
+            "paid_at": f"{nowdate()}T10:00:00.000Z",
             "gateway_response": "Approved" if self.charge_status == "success" else "Declined",
             "metadata": body.get("metadata") or {},
             "customer": {"email": body["email"], "customer_code": "CUS_saved"},
@@ -219,7 +221,7 @@ class FakePaystack:
         gross = sum(t["amount"] for t in transactions)
         payout = {"id": int(settlement_id), "status": "success", "currency": currency, "total_processed": gross,
                   "total_fees": fees, "total_amount": gross - fees, "effective_amount": gross - fees, "deductions": None,
-                  "settlement_date": "2026-09-26T00:00:00.000Z"}
+                  "settlement_date": f"{nowdate()}T00:00:00.000Z"}
         rows = [{"id": t["id"], "reference": t["reference"], "amount": t["amount"], "fees": t.get("fees") or 0,
                  "currency": t["currency"], "status": "success"} for t in transactions]
         self.settlements[str(settlement_id)] = {"payout": payout, "transactions": rows}

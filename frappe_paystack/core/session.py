@@ -60,8 +60,19 @@ def _json_default(value: Any) -> str:
     return str(value)
 
 
+def decode_kwargs(kwargs: dict) -> dict:
+    """
+    Return kwargs with byte strings decoded.
+
+    ERPNext's PaymentRequest.get_payment_url passes title, description and
+    payer_name as UTF-8 bytes.
+    """
+    return {key: value.decode("utf-8", "replace") if isinstance(value, bytes) else value for key, value in kwargs.items()}
+
+
 def normalise_request(kwargs: dict) -> frappe._dict:
     """Return the contract fields of get_payment_url kwargs, cleaned."""
+    kwargs = decode_kwargs(kwargs)
     request = frappe._dict({key: kwargs.get(key) for key in CONTRACT_KEYS})
     request.currency = money.clean_currency(request.currency)
     request.payer_email = (request.payer_email or "").strip()
@@ -120,6 +131,7 @@ def create_session(
     """
     from frappe_paystack.core.accounts import resolve_setting
 
+    kwargs = decode_kwargs(kwargs)
     request = normalise_request(kwargs)
     setting = resolve_setting(controller, request.reference_doctype, request.reference_docname)
     if not setting.enabled:
