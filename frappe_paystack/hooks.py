@@ -1,175 +1,77 @@
-from . import __version__ as app_version
-
 app_name = "frappe_paystack"
 app_title = "Frappe Paystack"
-app_publisher = "Anthony Emmanuel (Ghorz.com)"
-app_description = "Paystack payment gateway for Frappe and ERPext"
-app_icon = "octicon octicon-file-directory"
-app_color = "grey"
-app_email = "mymi14s@gmail.com"
-app_license = "MIT"
+app_publisher = "Anthony Emmanuel"
+app_description = "Paystack integration for Frappe/ERPNext"
+app_email = "hackacehuawei@gmail.com"
+app_license = "mit"
 
-# Includes in <head>
-# ------------------
-
-# include js, css files in header of desk.html
-# app_include_css = "/assets/frappe_paystack/css/frappe_paystack.css"
-# app_include_js = "/assets/frappe_paystack/js/frappe_paystack.js"
-
-# include js, css files in header of web template
-# web_include_css = "/assets/frappe_paystack/css/frappe_paystack.css"
-# web_include_js = "/assets/frappe_paystack/js/frappe_paystack.js"
-
-# include custom scss in every website theme (without file extension ".scss")
-# website_theme_scss = "frappe_paystack/public/scss/website"
-
-# include js, css files in header of web form
-# webform_include_js = {"doctype": "public/js/doctype.js"}
-# webform_include_css = {"doctype": "public/css/doctype.css"}
-
-# include js in page
-# page_js = {"page" : "public/js/file.js"}
-
-# include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
-# doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
-# doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
-# doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
-
-# Home Pages
-# ----------
-
-# application home page (will override Website Settings)
-# home_page = "login"
-
-# website user home page (by Role)
-# role_home_page = {
-#	"Role": "home_page"
-# }
-
-# Generators
-# ----------
-
-# automatically create page for each record of this doctype
-# website_generators = ["Web Page"]
-
-# Installation
-# ------------
-
-# before_install = "frappe_paystack.install.before_install"
-# after_install = "frappe_paystack.install.after_install"
-
-# Desk Notifications
-# ------------------
-# See frappe.core.notifications.get_notification_config
-
-# notification_config = "frappe_paystack.notifications.get_notification_config"
-
-# Permissions
-# -----------
-# Permissions evaluated in scripted ways
-
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
-# has_permission = {
-# 	"Event": "frappe.desk.doctype.event.event.has_permission",
-# }
-
-# DocType Class
-# ---------------
-# Override standard doctype classes
-
-# override_doctype_class = {
-# 	"ToDo": "custom_app.overrides.CustomToDo"
-# }
-
-# Document Events
-# ---------------
-# Hook on document methods and events
-
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-#	}
-# }
-
-# Scheduled Tasks
-# ---------------
-
-# scheduler_events = {
-# 	"all": [
-# 		"frappe_paystack.tasks.all"
-# 	],
-# 	"daily": [
-# 		"frappe_paystack.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"frappe_paystack.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"frappe_paystack.tasks.weekly"
-# 	]
-# 	"monthly": [
-# 		"frappe_paystack.tasks.monthly"
-# 	]
-# }
-
-# Testing
-# -------
-
-# before_tests = "frappe_paystack.install.before_tests"
-
-# Overriding Methods
-# ------------------------------
-#
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "frappe_paystack.event.get_events"
-# }
-#
-# each overriding function accepts a `data` argument;
-# generated from the base implementation of the doctype dashboard,
-# along with any modifications made in other Frappe apps
-# override_doctype_dashboards = {
-# 	"Task": "frappe_paystack.task.get_dashboard_data"
-# }
-
-# exempt linked doctypes from being automatically cancelled
-#
-# auto_cancel_exempted_doctypes = ["Auto Repeat"]
+required_apps = ["erpnext", "payments"]
 
 
-# User Data Protection
-# --------------------
+after_install = "frappe_paystack.setup.after_install"
 
-user_data_fields = [
-	{
-		"doctype": "{doctype_1}",
-		"filter_by": "{filter_by}",
-		"redact_fields": ["{field_1}", "{field_2}"],
-		"partial": 1,
-	},
-	{
-		"doctype": "{doctype_2}",
-		"filter_by": "{filter_by}",
-		"partial": 1,
-	},
-	{
-		"doctype": "{doctype_3}",
-		"strict": False,
-	},
-	{
-		"doctype": "{doctype_4}"
-	}
-]
 
-# Authentication and authorization
-# --------------------------------
+# Raises the ERPNext baseline for a test session.
+before_tests = "frappe_paystack.tests.session_setup.before_tests"
 
-# auth_hooks = [
-# 	"frappe_paystack.auth.validate"
-# ]
 
+app_include_css = "paystack_reconciliation.bundle.css"
+app_include_js = ["paystack_actions.bundle.js", "paystack_pos.bundle.js"]
+web_include_js = "paystack_cart_guard.bundle.js"
+
+
+doctype_js = {
+    "Sales Invoice": "public/js/sales_invoice.js",
+    "Sales Order": "public/js/sales_order.js",
+    "Dunning": "public/js/dunning.js",
+}
+
+
+# Authorises a portal user's receipt by ownership of the Payment Log.
+has_website_permission = {
+    "Paystack Payment Log": "frappe_paystack.utils.portal.has_payment_log_website_permission",
+}
+
+
+# Carries a document's Paystack payment state into the portal order pages.
+update_website_context = ["frappe_paystack.utils.portal.apply_payment_state"]
+
+
+doc_events = {
+    "Sales Invoice": {
+        "on_submit": "frappe_paystack.events.sales_invoice_on_submit",
+    },
+}
+
+
+scheduler_events = {
+    # Ten-minute re-drive of money that was received and never booked.
+    "cron": {
+        "*/10 * * * *": [
+            "frappe_paystack.frappe_paystack.doctype.paystack_payment_log"
+            ".paystack_payment_log.retry_stuck_settlements",
+        ],
+    },
+    # Hourly re-drive of payouts whose gross is still in suspense.
+    "hourly_long": [
+        "frappe_paystack.utils.settlement.retry_unposted_settlements",
+    ],
+    # Reconciliation makes one synchronous Paystack call per payment.
+    "daily_long": [
+        "frappe_paystack.utils.scheduled_jobs.run_daily_reconciliation",
+        # ERPNext's Subscription raises the invoice; this collects it.
+        "frappe_paystack.utils.subscription.collect_subscription_payments",
+    ],
+}
+
+
+website_route_rules = [{"from_route": "/paystack-checkout/<reference>", "to_route": "paystack-checkout"}]
+
+
+# Read-only helpers a print format calls to show a document's checkout link.
+jinja = {
+    "methods": [
+        "frappe_paystack.utils.printing.paystack_payment_link",
+        "frappe_paystack.utils.printing.paystack_payment_qr",
+    ]
+}

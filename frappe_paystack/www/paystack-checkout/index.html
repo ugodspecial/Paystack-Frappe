@@ -1,0 +1,114 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ _("Complete Payment") }}{% endblock %}
+
+{% block head_include %}
+<link rel="stylesheet" href="/assets/frappe_paystack/css/paystack_checkout.css">
+{% endblock %}
+
+{% block page_content %}
+<div id="paystack-checkout" class="ps-checkout">
+
+	{%- if not reference or not doc -%}
+	<section class="ps-card ps-card--message">
+		<div class="ps-icon ps-icon--error" aria-hidden="true">!</div>
+		<h1 class="ps-title">{{ _("Payment link not found") }}</h1>
+		<p class="ps-subtitle">
+			{{ _("This payment link is invalid or has been removed. Please request a new one.") }}
+		</p>
+	</section>
+
+	{%- elif not doc.public_key -%}
+	<section class="ps-card ps-card--message">
+		<div class="ps-icon ps-icon--error" aria-hidden="true">!</div>
+		<h1 class="ps-title">{{ _("Payments unavailable") }}</h1>
+		<p class="ps-subtitle">
+			{{ _("This merchant has not finished setting up online payments. Please contact them directly.") }}
+		</p>
+		<p class="ps-ref">{{ _("Reference") }}: <code>{{ reference }}</code></p>
+	</section>
+
+	{%- else -%}
+	<article class="ps-card" v-cloak>
+		<header class="ps-head">
+			<p class="ps-eyebrow">{{ _("Secure payment") }}</p>
+			<h1 class="ps-amount">[% formattedChargeAmount %]</h1>
+			<p class="ps-converted" v-if="showConverted">
+				[% formattedOrderTotal %] &middot; {{ _("rate") }} [% exchangeRate %]
+			</p>
+			<span class="ps-status" :class="'ps-status--' + statusTone">[% statusLabel %]</span>
+		</header>
+
+		<dl class="ps-details">
+			<div class="ps-row">
+				<dt>{{ _("Billed to") }}</dt>
+				<dd>[% doc.customer %]</dd>
+			</div>
+			<div class="ps-row" v-if="doc.email">
+				<dt>{{ _("Email") }}</dt>
+				<dd>[% doc.email %]</dd>
+			</div>
+			<div class="ps-row">
+				<dt>{{ _("Document") }}</dt>
+				<dd>[% doc.order_no %]</dd>
+			</div>
+			<div class="ps-row">
+				<dt>{{ _("Reference") }}</dt>
+				<dd><code>[% doc.reference %]</code></dd>
+			</div>
+			<div class="ps-row ps-row--total">
+				<dt>{{ _("Amount due") }}</dt>
+				<dd>[% formattedChargeAmount %]</dd>
+			</div>
+		</dl>
+
+		<div
+			class="ps-alert"
+			:class="'ps-alert--' + feedback.tone"
+			v-if="feedback.message"
+			role="status"
+			aria-live="polite"
+		>[% feedback.message %]</div>
+
+		<div class="ps-actions" v-if="canPay">
+			<label class="ps-field" v-if="needsEmail">
+				<span class="ps-label">{{ _("Email for your receipt") }}</span>
+				<input
+					type="email"
+					v-model.trim="email"
+					class="ps-input"
+					:class="{ 'ps-input--invalid': emailTouched && !isEmailValid }"
+					placeholder="you@example.com"
+					autocomplete="email"
+					@blur="emailTouched = true"
+				>
+				<span class="ps-hint" v-if="emailTouched && !isEmailValid">
+					{{ _("Enter a valid email address.") }}
+				</span>
+			</label>
+
+			<button type="button" class="ps-button" :disabled="!canSubmit" @click="startPayment">
+				<span v-if="busy" class="ps-spinner" aria-hidden="true"></span>
+				[% busy ? busyLabel : payLabel %]
+			</button>
+
+			<p class="ps-secure">{{ _("Payments are processed securely by Paystack.") }}</p>
+		</div>
+
+		<div class="ps-actions" v-else>
+			<p class="ps-closed">[% closedReason %]</p>
+		</div>
+	</article>
+	{%- endif -%}
+
+</div>
+{% endblock %}
+
+{% block script %}
+{%- if reference and doc and doc.public_key -%}
+<script type="application/json" id="paystack-checkout-data">{{ payload }}</script>
+<script src="/assets/frappe_paystack/js/vue.global.js"></script>
+<script src="https://js.paystack.co/v2/inline.js"></script>
+<script src="/assets/frappe_paystack/js/paystack_checkout.js"></script>
+{%- endif -%}
+{% endblock %}
