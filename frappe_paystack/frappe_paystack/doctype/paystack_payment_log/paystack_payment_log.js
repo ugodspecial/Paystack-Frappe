@@ -11,7 +11,22 @@ const PAYSTACK_STATUS_COLORS = {
 
 const CAPTURED = ["Paid", "Partially Refunded", "Refunded"];
 
+const BOOK_PAYMENT_ENTRY =
+	"frappe_paystack.integrations.erpnext.payment_entry.complete_payment";
+const BOOKABLE_DOCTYPES = ["Sales Invoice", "Sales Order", "Dunning"];
+
 frappe.ui.form.on("Paystack Payment Log", {
+	onload(frm) {
+		// ERPNext adapter: the outcome of a manual booking arrives in real time.
+		frappe.realtime.on("paystack_payment_completed", (data) => {
+			if (!data || data.log !== frm.doc.name) {
+				return;
+			}
+			frappe.show_alert({ message: data.message, indicator: data.booked ? "green" : "red" });
+			frm.reload_doc();
+		});
+	},
+
 	refresh(frm) {
 		frm.trigger("decorate");
 		frm.trigger("action_buttons");
@@ -85,6 +100,23 @@ frappe.ui.form.on("Paystack Payment Log", {
 		const refundable = flt(frm.doc.amount_paid) - flt(frm.doc.total_refunded);
 		if (["Paid", "Partially Refunded"].includes(frm.doc.status) && refundable > 0) {
 			frm.add_custom_button(__("Refund"), () => show_refund_dialog(frm, refundable), group);
+		}
+
+		// Only present when the ERPNext adapter is active (booking_status is a Custom Field).
+		if (
+			CAPTURED.includes(frm.doc.status) &&
+			["Pending", "Needs Attention"].includes(frm.doc.booking_status) &&
+			!frm.doc.payment_entry &&
+			BOOKABLE_DOCTYPES.includes(frm.doc.linked_doctype)
+		) {
+			frm.add_custom_button(
+				__("Book Payment Entry"),
+				() =>
+					frappe.call({ method: BOOK_PAYMENT_ENTRY, args: { payment_log_name: frm.doc.name } }).then(() =>
+						frappe.show_alert({ message: __("Verifying with Paystack and booking..."), indicator: "blue" })
+					),
+				group
+			);
 		}
 
 		if (frm.doc.status === "Pending") {

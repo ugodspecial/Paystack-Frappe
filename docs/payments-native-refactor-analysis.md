@@ -2,11 +2,29 @@
 
 | | |
 |---|---|
-| **Status** | Analysis only. **No application code has been changed.** Implementation waits for review of this document. |
+| **Status** | Phase 1 analysis, reviewed. **Phase 2 is implemented on this branch.** See the table below, `README.md` and `CHANGELOG.md`. |
 | **Date** | 2026-09-25 |
 | **Branch** | `arena/01a0d81a-paystack-frappe` @ `d5982d7` (identical to upstream `mymi14s/frappe_paystack` `master`) |
 | **Scope** | Deliverables 1 to 17 and the dependency matrix requested in the brief |
 | **Evidence** | Source code of every app involved, read at pinned commits (Appendix B), plus an **empirical import test** on Frappe 15.121.1 + Payments v15 **without ERPNext** |
+
+**Decisions as resolved for Phase 2:**
+
+| # | Resolution |
+|---|---|
+| D1 | Upstream `version-15` (15.5.0) and `version-16` (16.0.0) imported with history, then refactored. |
+| D2 | "School" = Education. It requires ERPNext, so it is tested in the ERPNext CI environment. LMS is the no-ERPNext target. |
+| D3 | One codebase on this repository's develop line for Frappe version-15 and version-16. CI also runs Frappe develop. |
+| D4 | In-app adapter at `frappe_paystack/integrations/erpnext`, with a CI import-boundary check. |
+| D5 | Callbacks run as the initiating user on every completion path: browser, webhook, sweep, and desk actions. Admin-login cases are handled: impersonation is recorded; an admin verifying from the desk is never the payer; an admin enrolling by hand is handled idempotently (LMS course) or flagged (LMS batch); System Managers can start a payment on behalf of a user; a payer's email never selects the user. |
+| D6 | "Paystack" stays the default gateway. Other accounts can register `Paystack-<name>`. |
+| D7 | Webhook Secret kept as an optional override. |
+| D8 | ERPNext-only settings are Custom Fields with the 15.x names. |
+| D9 | GitHub Actions on MariaDB: core, LMS and ERPNext+Education, plus an upgrade job from 15.5.0. |
+
+Two deviations from §10–§12:
+- `linked_doctype`/`linked_docname` keep their names, now typed as Link and Dynamic Link, instead of being renamed. This keeps reports, print formats and customisations working.
+- ERPNext-only reports stay in module "Frappe Paystack" but are guarded, rather than moving to a "Paystack ERPNext" module. The Sales Invoice print format is created by the adapter.
 
 How to read this: §0 gives the summary and the decisions needed. §1 to §5 describe the current state. §6 to §13 are the proposal. §14 to §17 cover tests, file plan and risks. Appendix A is the dependency matrix and Appendix B the evidence.
 
