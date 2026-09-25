@@ -26,6 +26,29 @@ class TestWebhookSecurity(PaystackTestCase):
         self.deliver("charge.success", tx, "whsec_only")
         self.assertEqual(self.session(session_name).status, PAID)
 
+    def test_an_unreadable_account_does_not_block_the_others(self):
+        """A site restored without its encryption key must still take webhooks for other accounts."""
+        from unittest.mock import patch
+
+        from frappe_paystack.frappe_paystack.doctype.paystack_gateway_setting.paystack_gateway_setting import (
+            PaystackGatewaySetting,
+        )
+
+        broken = make_setting("Paystack Broken Account", "sk_test_broken", "pk_test_broken")
+        self.addCleanup(frappe.delete_doc, "Paystack Gateway Setting", broken.name, force=True)
+        original = PaystackGatewaySetting.get_webhook_secret
+
+        def get_webhook_secret(setting):
+            if setting.name == broken.name:
+                frappe.throw("Encryption key is invalid!")
+            return original(setting)
+
+        session_name = self.session_of(self.payment_url())
+        self.start(session_name)
+        with patch.object(PaystackGatewaySetting, "get_webhook_secret", get_webhook_secret):
+            self.pay_and_notify(session_name)
+        self.assertEqual(self.session(session_name).status, PAID)
+
     def test_ip_allowlist(self):
         make_setting(self.setting.name, SECRET, "pk_test_core_public", allowed_webhook_ips="52.31.139.75\n10.0.0.0/8")
         self.deliver("transfer.success", {"id": 10}, ip="10.1.2.3")

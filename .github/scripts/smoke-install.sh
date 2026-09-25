@@ -41,6 +41,11 @@ if missing:
 print("bundles:", {key: value for key, value in assets.items() if "paystack" in key})
 EOF
 
+echo "--- create an account and a real payment (before serving: the first encrypted secret creates the site's key)"
+SMOKE="$(cd sites && ../env/bin/python "${SCRIPTS}/smoke_site.py" "${SITE}" 2>/dev/null | tail -1)"
+SESSION="$(echo "${SMOKE}" | python3 -c "import json,sys;print(json.load(sys.stdin)['session'])")"
+SECRET="$(echo "${SMOKE}" | python3 -c "import json,sys;print(json.load(sys.stdin)['secret'])")"
+
 echo "--- serve the site"
 bench --site "${SITE}" serve --port 8000 --noreload > /tmp/smoke-serve.log 2>&1 &
 SERVER=$!
@@ -56,10 +61,7 @@ expect GET "/assets/frappe_paystack/css/paystack_checkout.css" 200 "ps-checkout"
 ACTIONS="$(python3 -c "import json;print(json.load(open('sites/assets/assets.json'))['paystack_actions.bundle.js'])")"
 expect GET "${ACTIONS}" 200 "frappe_paystack.actions"
 
-echo "--- a real payment's checkout page"
-SMOKE="$(cd sites && ../env/bin/python "${SCRIPTS}/smoke_site.py" "${SITE}" | tail -1)"
-SESSION="$(echo "${SMOKE}" | python3 -c "import json,sys;print(json.load(sys.stdin)['session'])")"
-SECRET="$(echo "${SMOKE}" | python3 -c "import json,sys;print(json.load(sys.stdin)['secret'])")"
+echo "--- the payment's checkout page"
 expect GET "/paystack-checkout/${SESSION}" 200 "js.paystack.co/v2/inline.js"
 grep -q "paystack_checkout.js" /tmp/smoke-body || fail "checkout page does not load paystack_checkout.js"
 grep -q "ps-pay" /tmp/smoke-body || fail "checkout page has no Pay button"

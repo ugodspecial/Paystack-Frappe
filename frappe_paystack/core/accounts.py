@@ -134,7 +134,15 @@ def settings_for_signature(payload: bytes, signature: Optional[str]) -> Optional
     matched = []
     for name in enabled_settings():
         setting = frappe.get_doc(GATEWAY_SETTING, name)
-        if verify_signature(payload, signature, setting.get_webhook_secret()):
+        try:
+            secret = setting.get_webhook_secret()
+        except Exception:
+            # One account whose secret cannot be decrypted (e.g. a site restored without
+            # its encryption key) must not stop webhooks for the others.
+            frappe.clear_messages()
+            frappe.log_error(title=f"Paystack: cannot read the webhook secret of {name}", message=frappe.get_traceback())
+            continue
+        if verify_signature(payload, signature, secret):
             matched.append(setting)
 
     if len(matched) > 1:
