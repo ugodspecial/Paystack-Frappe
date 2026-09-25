@@ -2,7 +2,8 @@
 Static checks that need no bench (run by the "static" CI job):
 
 * nothing outside frappe_paystack/integrations/erpnext imports ERPNext, and the
-  adapter imports it only inside functions;
+  adapter imports it only inside functions (the tests of the adapter follow the
+  same rule: they import ERPNext lazily and skip themselves without it);
 * hooks.required_apps is ["payments"] and pyproject declares no ERPNext dependency.
 """
 
@@ -14,6 +15,7 @@ import tomllib
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 APP = ROOT / "frappe_paystack"
 ADAPTER = APP / "integrations" / "erpnext"
+TESTS = APP / "tests"
 errors = []
 
 
@@ -32,7 +34,7 @@ def erpnext_imports(tree):
 
 for path in APP.rglob("*.py"):
     tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
-    in_adapter = ADAPTER in path.parents
+    in_adapter = ADAPTER in path.parents or TESTS in path.parents
     for name, module_level, line in erpnext_imports(tree):
         if not in_adapter:
             errors.append(f"{path.relative_to(ROOT)}:{line} imports {name} outside the ERPNext adapter")
