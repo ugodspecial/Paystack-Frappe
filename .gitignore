@@ -16,3 +16,6 @@ cypress/downloads
 .coverage
 .coverage.*
 htmlcov
+
+# Built by `bench build`; never committed.
+frappe_paystack/public/dist/

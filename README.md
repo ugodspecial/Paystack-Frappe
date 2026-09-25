@@ -33,10 +33,14 @@ Your app (LMS, Education, Web Forms, ERPNext, ...) ──▶ Frappe Payments ─
 ```bash
 bench get-app payments https://github.com/frappe/payments --branch version-15   # or version-16 / develop
 bench get-app frappe_paystack https://github.com/ugodspecial/Paystack-Frappe
-bench --site your.site install-app payments
-bench --site your.site install-app frappe_paystack
-bench --site your.site list-apps        # frappe, payments, frappe_paystack
+bench --site your.site install-app frappe_paystack   # also installs payments (required_apps)
+bench --site your.site list-apps                     # frappe, payments, frappe_paystack
 ```
+
+`bench get-app --resolve-deps frappe_paystack <url>` can fetch Payments for you, because
+`required_apps` names it as `frappe/payments`. Pass the Payments branch that matches your
+Frappe version if you fetch it yourself. `bench get-app` builds the app's assets. If you
+skipped that step, run `bench build --app frappe_paystack`.
 
 On a site that already has ERPNext, or when ERPNext is installed later, the ERPNext
 adapter activates itself. See [ERPNext features](#erpnext-features).

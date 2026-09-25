@@ -5,10 +5,11 @@ app_description = "Paystack payment gateway for Frappe Payments (ERPNext optiona
 app_email = "hackacehuawei@gmail.com"
 app_license = "mit"
 
-# Only Payments is required. ERPNext, LMS, Education and Webshop are optional
+# Only Payments is required ("org/repo" so that `bench get-app --resolve-deps`
+# can fetch it). ERPNext, LMS, Education and Webshop are optional
 # consumers; ERPNext features are provided by frappe_paystack.integrations.erpnext,
 # which activates itself when ERPNext is installed.
-required_apps = ["payments"]
+required_apps = ["frappe/payments"]
 
 # ---------------------------------------------------------------------------
 # Install / migrate lifecycle

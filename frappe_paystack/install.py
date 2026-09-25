@@ -24,6 +24,8 @@ from frappe_paystack.core.constants import (
 NUMBER_CARD = "Number Card"
 DASHBOARD_CHART = "Dashboard Chart"
 ERROR_LOG = "Error Log"
+# Widgets carry the app's module so `uninstall-app` removes them with it.
+MODULE = "Frappe Paystack"
 
 # Number cards the workspace shows. ERPNext cards are added by the adapter.
 NUMBER_CARDS = [
@@ -113,11 +115,14 @@ def ensure_number_cards(cards=None) -> None:
             "is_public": 1,
             "show_percentage_stats": 0,
             "label": card["name"],
+            "module": MODULE,
             **card,
         }
         if frappe.db.exists(NUMBER_CARD, card["name"]):
             frappe.db.set_value(
-                NUMBER_CARD, card["name"], {"filters_json": card["filters_json"], "document_type": card["document_type"]},
+                NUMBER_CARD,
+                card["name"],
+                {"filters_json": card["filters_json"], "document_type": card["document_type"], "module": MODULE},
                 update_modified=False,
             )
             continue
@@ -129,10 +134,10 @@ def ensure_number_cards(cards=None) -> None:
 def ensure_dashboard_charts() -> None:
     for chart in DASHBOARD_CHARTS:
         if frappe.db.exists(DASHBOARD_CHART, chart["chart_name"]):
-            frappe.db.set_value(DASHBOARD_CHART, chart["chart_name"], "filters_json", chart["filters_json"],
+            frappe.db.set_value(DASHBOARD_CHART, chart["chart_name"], {"filters_json": chart["filters_json"], "module": MODULE},
                                 update_modified=False)
             continue
-        doc = frappe.get_doc({"doctype": DASHBOARD_CHART, "is_public": 1, **chart})
+        doc = frappe.get_doc({"doctype": DASHBOARD_CHART, "is_public": 1, "module": MODULE, **chart})
         doc.flags.ignore_permissions = True
         doc.insert()
 
@@ -194,12 +199,24 @@ def before_app_uninstall(app_name: str) -> None:
         erpnext.deactivate()
 
 
+def remove_dashboard_widgets() -> None:
+    from frappe_paystack.integrations.erpnext.setup import NUMBER_CARDS as ERPNEXT_CARDS
+
+    for card in NUMBER_CARDS + ERPNEXT_CARDS:
+        if frappe.db.exists(NUMBER_CARD, card["name"]):
+            frappe.delete_doc(NUMBER_CARD, card["name"], force=True, ignore_permissions=True)
+    for chart in DASHBOARD_CHARTS:
+        if frappe.db.exists(DASHBOARD_CHART, chart["chart_name"]):
+            frappe.delete_doc(DASHBOARD_CHART, chart["chart_name"], force=True, ignore_permissions=True)
+
+
 def before_uninstall() -> None:
     from frappe_paystack.core.constants import GATEWAY_SETTING
     from frappe_paystack.integrations import erpnext
 
     if erpnext.is_available():
         erpnext.deactivate()
+    remove_dashboard_widgets()
     for gateway in frappe.get_all("Payment Gateway", filters={"gateway_settings": GATEWAY_SETTING}, pluck="name"):
         try:
             frappe.delete_doc("Payment Gateway", gateway, force=True, ignore_permissions=True)

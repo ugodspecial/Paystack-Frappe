@@ -10,7 +10,7 @@ class TestInstall(PaystackTestCase):
     def test_required_apps_are_only_payments(self):
         from frappe_paystack import hooks
 
-        self.assertEqual(hooks.required_apps, ["payments"])
+        self.assertEqual([app.split("/")[-1] for app in hooks.required_apps], ["payments"])
 
     def test_installed_alongside_payments(self):
         apps = frappe.get_installed_apps()

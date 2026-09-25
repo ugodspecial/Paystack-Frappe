@@ -197,6 +197,74 @@ jobs:
         if: ${{ failure() }}
         run: python3 .github/scripts/annotate_failure.py "${RUNNER_TEMP}/ci.log" /home/runner/frappe-bench/logs
 
+  install:
+    name: Fresh install with assets (frappe ${{ matrix.frappe }}, Python ${{ matrix.python }})
+    needs: [static]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - frappe: version-15
+            payments: version-15
+            python: '3.12'
+            mariadb: '10.6'
+          - frappe: version-16
+            payments: version-16
+            python: '3.14'
+            mariadb: '11.8'
+          - frappe: develop
+            payments: develop
+            python: '3.14'
+            mariadb: '11.8'
+    env:
+      CI: 'Yes'
+      FRAPPE_BRANCH: ${{ matrix.frappe }}
+      PAYMENTS_BRANCH: ${{ matrix.payments }}
+      CYPRESS_INSTALL_BINARY: '0'
+    services:
+      redis-cache:
+        image: redis:alpine
+        ports:
+          - 13000:6379
+      redis-queue:
+        image: redis:alpine
+        ports:
+          - 11000:6379
+      mariadb:
+        image: mariadb:${{ matrix.mariadb }}
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized || mariadb-admin ping -proot" --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install MariaDB client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+      - name: Install like a user (assets built; only frappe_paystack installed explicitly)
+        env:
+          PYTHON_BIN: ${{ steps.python.outputs.python-path }}
+        run: bash .github/scripts/fresh-install.sh 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+      - name: Smoke-test the running site
+        run: bash .github/scripts/smoke-install.sh ~/frappe-bench test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+      - name: Show server log
+        if: ${{ failure() }}
+        run: tail -n 100 /tmp/smoke-serve.log || true
+      - name: Publish the failure log as annotations
+        if: ${{ failure() }}
+        run: python3 .github/scripts/annotate_failure.py "${RUNNER_TEMP}/ci.log" /home/runner/frappe-bench/logs
+
   upgrade:
     name: Upgrade from upstream 15.5.0 (ERPNext, frappe version-15)
     needs: [static]

@@ -4,7 +4,7 @@ Static checks that need no bench (run by the "static" CI job):
 * nothing outside frappe_paystack/integrations/erpnext imports ERPNext, and the
   adapter imports it only inside functions (the tests of the adapter follow the
   same rule: they import ERPNext lazily and skip themselves without it);
-* hooks.required_apps is ["payments"] and pyproject declares no ERPNext dependency.
+* hooks.required_apps names only Payments and pyproject declares no ERPNext dependency.
 """
 
 import ast
@@ -44,8 +44,10 @@ for path in APP.rglob("*.py"):
 hooks = ast.parse((APP / "hooks.py").read_text(encoding="utf-8"))
 for node in hooks.body:
     if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "required_apps" for t in node.targets):
-        if ast.literal_eval(node.value) != ["payments"]:
-            errors.append(f"hooks.required_apps is {ast.literal_eval(node.value)}, expected ['payments']")
+        apps = ast.literal_eval(node.value)
+        # Entries may be "payments" or "frappe/payments" (optionally "@branch").
+        if [app.split("@")[0].rstrip("/").split("/")[-1] for app in apps] != ["payments"]:
+            errors.append(f"hooks.required_apps is {apps}, expected only payments")
 
 pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 deps = pyproject.get("tool", {}).get("bench", {}).get("frappe-dependencies", {})
