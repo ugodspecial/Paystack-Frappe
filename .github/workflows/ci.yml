@@ -13,6 +13,10 @@ concurrency:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash -eo pipefail {0}
+
 jobs:
   static:
     name: Static checks
@@ -170,23 +174,28 @@ jobs:
       - name: Build bench and install apps
         env:
           PYTHON_BIN: ${{ steps.python.outputs.python-path }}
-        run: bash .github/scripts/setup-bench.sh
+        run: bash .github/scripts/setup-bench.sh 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
 
       - name: Installed apps are exactly ${{ matrix.expect_apps }}
-        run: bash .github/scripts/assert-apps.sh ~/frappe-bench test_site ${{ matrix.expect_apps }}
+        run: bash .github/scripts/assert-apps.sh ~/frappe-bench test_site ${{ matrix.expect_apps }} 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
 
       - name: Migrate twice (patches and schema sync are idempotent)
         working-directory: /home/runner/frappe-bench
         run: |
-          bench --site test_site migrate
-          bench --site test_site migrate
+          set -o pipefail
+          bench --site test_site migrate 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+          bench --site test_site migrate 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
 
       - name: Run the frappe_paystack suite
-        run: bash .github/scripts/run-tests.sh ~/frappe-bench test_site
+        run: bash .github/scripts/run-tests.sh ~/frappe-bench test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
 
       - name: Show bench logs
         if: ${{ failure() }}
         run: tail -n 200 /home/runner/frappe-bench/logs/*.log || true
+
+      - name: Publish the failure log as annotations
+        if: ${{ failure() }}
+        run: python3 .github/scripts/annotate_failure.py "${RUNNER_TEMP}/ci.log" /home/runner/frappe-bench/logs
 
   upgrade:
     name: Upgrade from upstream 15.5.0 (ERPNext, frappe version-15)
@@ -232,10 +241,10 @@ jobs:
       - name: Install upstream frappe_paystack 15.5.0 with ERPNext
         env:
           PYTHON_BIN: ${{ steps.python.outputs.python-path }}
-        run: bash .github/scripts/setup-bench.sh
+        run: bash .github/scripts/setup-bench.sh 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
       - name: Seed 15.5.0-shaped data
         working-directory: /home/runner/frappe-bench/sites
-        run: ../env/bin/python "${GITHUB_WORKSPACE}/.github/scripts/upgrade_seed.py" test_site
+        run: ../env/bin/python "${GITHUB_WORKSPACE}/.github/scripts/upgrade_seed.py" test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
       - name: Switch the app to this commit and migrate
         working-directory: /home/runner/frappe-bench
         run: |
@@ -244,10 +253,15 @@ jobs:
           git -C apps/frappe_paystack checkout -f FETCH_HEAD
           find apps/frappe_paystack -name '__pycache__' -type d -prune -exec rm -rf {} +
           ./env/bin/pip install --quiet -e apps/frappe_paystack
-          bench --site test_site migrate
+          set -o pipefail
+          bench --site test_site migrate 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
       - name: Verify statuses and preserved ERPNext data
         working-directory: /home/runner/frappe-bench/sites
-        run: ../env/bin/python "${GITHUB_WORKSPACE}/.github/scripts/upgrade_verify.py" test_site
+        run: ../env/bin/python "${GITHUB_WORKSPACE}/.github/scripts/upgrade_verify.py" test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
       - name: Show bench logs
         if: ${{ failure() }}
         run: tail -n 200 /home/runner/frappe-bench/logs/*.log || true
+
+      - name: Publish the failure log as annotations
+        if: ${{ failure() }}
+        run: python3 .github/scripts/annotate_failure.py "${RUNNER_TEMP}/ci.log" /home/runner/frappe-bench/logs

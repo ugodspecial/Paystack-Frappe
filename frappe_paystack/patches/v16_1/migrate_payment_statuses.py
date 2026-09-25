@@ -42,14 +42,15 @@ def execute() -> None:
             values["booking_status"] = booking
         frappe.db.set_value(PAYMENT_LOG, row.name, values, update_modified=False)
 
-    # Uncaptured sessions: Pending ones may still be paid; Failed ones need no notification.
+    # Uncaptured sessions: Pending ones may still be paid; Failed ones need no
+    # notification. (The new column was filled with its default, 'Pending'.)
     frappe.db.sql(
         f"""update `tab{PAYMENT_LOG}` set notification_status = 'Pending'
         where status = 'Pending' and coalesce(notification_status, '') = ''"""
     )
     frappe.db.sql(
         f"""update `tab{PAYMENT_LOG}` set notification_status = 'Not Required'
-        where status = 'Failed' and coalesce(notification_status, '') = ''"""
+        where status = 'Failed' and coalesce(notification_status, 'Pending') in ('', 'Pending')"""
     )
     recompute_open_charges()
     frappe.db.commit()

@@ -172,11 +172,14 @@ class PaystackTestCase(FrappeBaseTestCase):
         with as_user(user):
             return start_checkout(session, email=email)
 
-    def deliver(self, event: str, data: dict, secret: str = SECRET, ip: str = "52.31.139.75") -> dict:
+    # The secret webhooks are signed with (the account the session belongs to).
+    webhook_secret = SECRET
+
+    def deliver(self, event: str, data: dict, secret: Optional[str] = None, ip: str = "52.31.139.75") -> dict:
         """Deliver a signed webhook as Paystack would (as Guest)."""
         from frappe_paystack.core.webhook import receive
 
-        body, signature = webhook(event, data, secret)
+        body, signature = webhook(event, data, secret or self.webhook_secret)
         with as_user("Guest"):
             return receive(body, signature, ip)
 
