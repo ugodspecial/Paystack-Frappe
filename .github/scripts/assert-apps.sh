@@ -4,8 +4,9 @@
 set -Eeuo pipefail
 BENCH_DIR="$1"; SITE="$2"; shift 2
 cd "${BENCH_DIR}"
-INSTALLED="$(bench --site "${SITE}" list-apps | awk '{print $1}' | sort | tr '\n' ' ')"
-EXPECTED="$(printf '%s\n' "$@" | sort | tr '\n' ' ')"
+# list-apps prints blank lines and version columns; keep the first word of each app line.
+INSTALLED="$(bench --site "${SITE}" list-apps | awk 'NF {print $1}' | sort | xargs)"
+EXPECTED="$(printf '%s\n' "$@" | sort | xargs)"
 echo "installed: ${INSTALLED}"
 echo "expected:  ${EXPECTED}"
 if [ "${INSTALLED}" != "${EXPECTED}" ]; then

@@ -67,7 +67,7 @@ jobs:
             frappe: version-15
             payments: version-15
             python: '3.12'
-            node: 18
+            node: 24
             mariadb: '10.6'
             extra_apps: ''
             expect_apps: frappe payments frappe_paystack
@@ -92,7 +92,7 @@ jobs:
             frappe: version-15
             payments: version-15
             python: '3.12'
-            node: 18
+            node: 24
             mariadb: '10.6'
             extra_apps: lms@version-15
             expect_apps: frappe payments lms frappe_paystack
@@ -117,7 +117,7 @@ jobs:
             frappe: version-15
             payments: version-15
             python: '3.12'
-            node: 18
+            node: 24
             mariadb: '10.6'
             extra_apps: erpnext@version-15 webshop@version-15 education@version-15.2
             expect_apps: frappe payments erpnext webshop education frappe_paystack
@@ -233,7 +233,7 @@ jobs:
           python-version: '3.12'
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 24
       - name: Install MariaDB client
         run: |
           sudo apt-get update -qq
