@@ -1,0 +1,14 @@
+{
+	"name": "frappe_paystack",
+	"version": "0.0.1",
+	"private": true,
+	"description": "Paystack payment gateway for Frappe Payments",
+	"scripts": {
+		"test": "vitest run",
+		"test:watch": "vitest"
+	},
+	"devDependencies": {
+		"jsdom": "^25.0.1",
+		"vitest": "^2.1.9"
+	}
+}

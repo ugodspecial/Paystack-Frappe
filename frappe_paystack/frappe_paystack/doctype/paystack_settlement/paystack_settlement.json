@@ -1,0 +1,168 @@
+{
+ "actions": [],
+ "autoname": "field:settlement_id",
+ "creation": "2026-08-02 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "settlement_id",
+  "gateway_setting",
+  "paystack_status",
+  "settlement_date",
+  "source",
+  "currency",
+  "column_break_amounts",
+  "gross_amount",
+  "total_fees",
+  "deductions",
+  "net_amount",
+  "transactions_linked",
+  "section_break_trace",
+  "integration_request",
+  "tab_break_errors",
+  "errors"
+ ],
+ "fields": [
+  {
+   "fieldname": "settlement_id",
+   "fieldtype": "Data",
+   "label": "Settlement ID",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "gateway_setting",
+   "fieldtype": "Link",
+   "label": "Paystack Account",
+   "options": "Paystack Gateway Setting",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "paystack_status",
+   "fieldtype": "Data",
+   "label": "Paystack Status",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "settlement_date",
+   "fieldtype": "Date",
+   "label": "Settlement Date",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Recorded From",
+   "options": "\nwebhook\npoll",
+   "read_only": 1
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Data",
+   "label": "Currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_amounts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gross_amount",
+   "fieldtype": "Currency",
+   "label": "Gross Amount",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_fees",
+   "fieldtype": "Currency",
+   "label": "Total Fees",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "deductions",
+   "fieldtype": "Currency",
+   "label": "Deductions",
+   "options": "currency",
+   "read_only": 1,
+   "description": "Refunds and chargebacks Paystack held back from this payout."
+  },
+  {
+   "fieldname": "net_amount",
+   "fieldtype": "Currency",
+   "label": "Net Amount",
+   "options": "currency",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "transactions_linked",
+   "fieldtype": "Int",
+   "label": "Transactions Linked",
+   "default": "0",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "section_break_trace",
+   "fieldtype": "Section Break",
+   "label": "Trace"
+  },
+  {
+   "fieldname": "integration_request",
+   "fieldtype": "Link",
+   "label": "Integration Request",
+   "options": "Integration Request",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "tab_break_errors",
+   "fieldtype": "Tab Break",
+   "label": "Errors"
+  },
+  {
+   "fieldname": "errors",
+   "fieldtype": "Small Text",
+   "label": "Errors",
+   "read_only": 1,
+   "no_copy": 1
+  }
+ ],
+ "in_create": 1,
+ "links": [],
+ "modified": "2026-09-25 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Frappe Paystack",
+ "name": "Paystack Settlement",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "Paystack Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

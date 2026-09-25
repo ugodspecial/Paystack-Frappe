@@ -1,0 +1,508 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2025-09-21 11:01:41.970331",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "linked_doctype",
+  "linked_docname",
+  "title",
+  "amount",
+  "currency",
+  "column_break_payer",
+  "payer_email",
+  "payer_name",
+  "description",
+  "redirect_to",
+  "order_id",
+  "section_break_capture",
+  "amount_paid",
+  "currency_paid",
+  "payment_date",
+  "paystack_fee",
+  "total_refunded",
+  "column_break_capture",
+  "transaction_id",
+  "payment_reference",
+  "channel",
+  "settlement",
+  "customer_authorization",
+  "completed_via",
+  "completed_by",
+  "completed_at",
+  "section_break_notification",
+  "notification_status",
+  "notification_attempts",
+  "last_notification_attempt",
+  "column_break_notification",
+  "notified_as",
+  "notification_error",
+  "consumer_redirect",
+  "section_break_audit",
+  "initiated_by",
+  "impersonated_by",
+  "run_as_user",
+  "column_break_audit",
+  "gateway_setting",
+  "payment_gateway",
+  "expires_at",
+  "tab_break_technical",
+  "errors",
+  "attempt_count",
+  "attempt_email",
+  "access_code",
+  "authorization_url",
+  "last_verified_at",
+  "column_break_technical",
+  "integration_request",
+  "idempotency_key",
+  "webhook_event_id",
+  "legacy_status",
+  "request_data"
+ ],
+ "fields": [
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Pending\nPaid\nFailed\nCancelled\nExpired\nNeeds Attention\nPartially Refunded\nRefunded",
+   "default": "Pending",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "linked_doctype",
+   "fieldtype": "Link",
+   "label": "Reference DocType",
+   "options": "DocType",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "linked_docname",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Name",
+   "options": "linked_doctype",
+   "in_list_view": 1,
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "options": "currency",
+   "in_list_view": 1,
+   "read_only": 1,
+   "description": "What Paystack is asked to charge, in the payment currency."
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Data",
+   "label": "Currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_payer",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "payer_email",
+   "fieldtype": "Data",
+   "label": "Payer Email",
+   "options": "Email",
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "payer_name",
+   "fieldtype": "Data",
+   "label": "Payer Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description",
+   "read_only": 1
+  },
+  {
+   "fieldname": "redirect_to",
+   "fieldtype": "Small Text",
+   "label": "Redirect To",
+   "read_only": 1
+  },
+  {
+   "fieldname": "order_id",
+   "fieldtype": "Data",
+   "label": "Order ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_capture",
+   "fieldtype": "Section Break",
+   "label": "Capture"
+  },
+  {
+   "fieldname": "amount_paid",
+   "fieldtype": "Currency",
+   "label": "Amount Paid",
+   "options": "currency_paid",
+   "read_only": 1
+  },
+  {
+   "fieldname": "currency_paid",
+   "fieldtype": "Link",
+   "label": "Currency Paid",
+   "options": "Currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_date",
+   "fieldtype": "Date",
+   "label": "Payment Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "paystack_fee",
+   "fieldtype": "Currency",
+   "label": "Paystack Fee",
+   "options": "currency_paid",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "What Paystack kept from this capture, as it reported it."
+  },
+  {
+   "fieldname": "total_refunded",
+   "fieldtype": "Currency",
+   "label": "Total Refunded",
+   "options": "currency_paid",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_break_capture",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "transaction_id",
+   "fieldtype": "Data",
+   "label": "Transaction ID",
+   "unique": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "payment_reference",
+   "fieldtype": "Data",
+   "label": "Paystack Reference",
+   "search_index": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "channel",
+   "fieldtype": "Data",
+   "label": "Channel",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "settlement",
+   "fieldtype": "Link",
+   "label": "Settlement",
+   "options": "Paystack Settlement",
+   "search_index": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "customer_authorization",
+   "fieldtype": "Link",
+   "label": "Saved Card",
+   "options": "Paystack Customer Authorization",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "completed_via",
+   "fieldtype": "Select",
+   "label": "Completed Via",
+   "options": "\nCallback\nWebhook\nSweep\nManual\nCharge",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "completed_by",
+   "fieldtype": "Link",
+   "label": "Completed By",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "label": "Completed At",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "section_break_notification",
+   "fieldtype": "Section Break",
+   "label": "Consumer Notification",
+   "description": "Whether the application that owns the document was told about the payment. Its callback runs as the Run As user."
+  },
+  {
+   "fieldname": "notification_status",
+   "fieldtype": "Select",
+   "label": "Notification Status",
+   "options": "Pending\nNotified\nFailed\nNeeds Attention\nNot Required",
+   "default": "Pending",
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "notification_attempts",
+   "fieldtype": "Int",
+   "label": "Attempts",
+   "default": "0",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "last_notification_attempt",
+   "fieldtype": "Datetime",
+   "label": "Last Attempt",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_break_notification",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "notified_as",
+   "fieldtype": "Link",
+   "label": "Notified As",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "notification_error",
+   "fieldtype": "Small Text",
+   "label": "Notification Error",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "consumer_redirect",
+   "fieldtype": "Small Text",
+   "label": "Consumer Redirect",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "section_break_audit",
+   "fieldtype": "Section Break",
+   "label": "Initiation",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "initiated_by",
+   "fieldtype": "Link",
+   "label": "Initiated By",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "impersonated_by",
+   "fieldtype": "Link",
+   "label": "Impersonated By",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Set when the initiator's session was an administrator impersonating them."
+  },
+  {
+   "fieldname": "run_as_user",
+   "fieldtype": "Link",
+   "label": "Run As User",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "The user the consumer's callback runs as, whoever completes the payment (browser, webhook, scheduler or desk)."
+  },
+  {
+   "fieldname": "column_break_audit",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gateway_setting",
+   "fieldtype": "Link",
+   "label": "Paystack Account",
+   "options": "Paystack Gateway Setting",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_gateway",
+   "fieldtype": "Link",
+   "label": "Payment Gateway",
+   "options": "Payment Gateway",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expires_at",
+   "fieldtype": "Datetime",
+   "label": "Expires At",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "tab_break_technical",
+   "fieldtype": "Tab Break",
+   "label": "Technical"
+  },
+  {
+   "fieldname": "errors",
+   "fieldtype": "Small Text",
+   "label": "Errors",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "attempt_count",
+   "fieldtype": "Int",
+   "label": "Checkout Attempts",
+   "default": "0",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "attempt_email",
+   "fieldtype": "Data",
+   "label": "Attempt Email",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "access_code",
+   "fieldtype": "Data",
+   "label": "Access Code",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "authorization_url",
+   "fieldtype": "Small Text",
+   "label": "Authorization URL",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "last_verified_at",
+   "fieldtype": "Datetime",
+   "label": "Last Verified At",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_break_technical",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "integration_request",
+   "fieldtype": "Link",
+   "label": "Integration Request",
+   "options": "Integration Request",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "idempotency_key",
+   "fieldtype": "Data",
+   "label": "Idempotency Key",
+   "hidden": 1,
+   "search_index": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "webhook_event_id",
+   "fieldtype": "Data",
+   "label": "Webhook Event ID (legacy)",
+   "hidden": 1,
+   "unique": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "legacy_status",
+   "fieldtype": "Data",
+   "label": "Status before 16.1",
+   "hidden": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "request_data",
+   "fieldtype": "Code",
+   "label": "Request Data",
+   "options": "JSON",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "The kwargs the consuming application passed to get_payment_url, verbatim."
+  }
+ ],
+ "in_create": 1,
+ "links": [],
+ "modified": "2026-09-25 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Frappe Paystack",
+ "name": "Paystack Payment Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "Paystack Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "linked_docname,payer_email,payment_reference",
+ "show_title_field_in_link": 0,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}

@@ -1,0 +1,85 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ _("Complete Payment") }}{% endblock %}
+
+{% block head_include %}
+<link rel="stylesheet" href="/assets/frappe_paystack/css/paystack_checkout.css">
+{% endblock %}
+
+{% block page_content %}
+<div id="paystack-checkout" class="ps-checkout">
+
+	{%- if not reference or not doc -%}
+	<section class="ps-card ps-card--message">
+		<div class="ps-icon ps-icon--error" aria-hidden="true">!</div>
+		<h1 class="ps-title">{{ _("Payment link not found") }}</h1>
+		<p class="ps-subtitle">{{ _("This payment link is invalid or has been removed. Please request a new one.") }}</p>
+	</section>
+
+	{%- elif not doc.public_key and not doc.is_paid -%}
+	<section class="ps-card ps-card--message">
+		<div class="ps-icon ps-icon--error" aria-hidden="true">!</div>
+		<h1 class="ps-title">{{ _("Payments unavailable") }}</h1>
+		<p class="ps-subtitle">{{ _("This merchant has not finished setting up online payments. Please contact them directly.") }}</p>
+		<p class="ps-ref">{{ _("Reference") }}: <code>{{ reference }}</code></p>
+	</section>
+
+	{%- else -%}
+	<article class="ps-card">
+		<header class="ps-head">
+			<p class="ps-eyebrow">{{ _("Secure payment") }}</p>
+			<h1 class="ps-amount">{{ doc.formatted_amount }}</h1>
+			<p class="ps-converted">{{ doc.title }}</p>
+			{%- set tone = "success" if doc.is_paid else ("danger" if doc.status in ("Failed", "Needs Attention") else "pending") -%}
+			<span class="ps-status ps-status--{{ tone }}" id="ps-status">{{ _(doc.status) }}</span>
+		</header>
+
+		<dl class="ps-details">
+			{%- if doc.description -%}
+			<div class="ps-row"><dt>{{ _("For") }}</dt><dd>{{ doc.description }}</dd></div>
+			{%- endif -%}
+			{%- for row in doc.rows -%}
+			<div class="ps-row"><dt>{{ row.label }}</dt><dd>{{ row.value }}</dd></div>
+			{%- endfor -%}
+			{%- if doc.email -%}
+			<div class="ps-row"><dt>{{ _("Email") }}</dt><dd>{{ doc.email }}</dd></div>
+			{%- endif -%}
+			<div class="ps-row"><dt>{{ _("Reference") }}</dt><dd><code>{{ doc.reference }}</code></dd></div>
+			<div class="ps-row ps-row--total"><dt>{{ _("Amount due") }}</dt><dd>{{ doc.formatted_amount }}</dd></div>
+		</dl>
+
+		<div class="ps-alert ps-alert--info" id="ps-feedback" role="status" aria-live="polite" hidden></div>
+
+		{%- if doc.is_paid -%}
+		<div class="ps-actions">
+			<p class="ps-closed">{{ _("This payment has been received. Thank you.") }}</p>
+		</div>
+		{%- elif doc.is_payable -%}
+		<div class="ps-actions" id="ps-actions">
+			{%- if doc.needs_email -%}
+			<label class="ps-field">
+				<span class="ps-label">{{ _("Email for your receipt") }}</span>
+				<input type="email" id="ps-email" class="ps-input" placeholder="you@example.com" autocomplete="email">
+			</label>
+			{%- endif -%}
+			<button type="button" class="ps-button" id="ps-pay">{{ _("Pay {0}").format(doc.formatted_amount) }}</button>
+			<p class="ps-secure">{{ _("Payments are processed securely by Paystack.") }}</p>
+		</div>
+		{%- else -%}
+		<div class="ps-actions">
+			<p class="ps-closed">{{ doc.closed_reason or _("This payment can no longer be made.") }}</p>
+		</div>
+		{%- endif -%}
+	</article>
+	{%- endif -%}
+
+</div>
+{% endblock %}
+
+{% block script %}
+{%- if reference and doc and doc.public_key and doc.is_payable -%}
+<script type="application/json" id="paystack-checkout-data">{{ payload }}</script>
+<script src="https://js.paystack.co/v2/inline.js"></script>
+<script src="/assets/frappe_paystack/js/paystack_checkout.js"></script>
+{%- endif -%}
+{% endblock %}

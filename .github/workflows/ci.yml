@@ -1,0 +1,334 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main, version-15, version-16]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -eo pipefail {0}
+
+jobs:
+  static:
+    name: Static checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile on the oldest supported interpreter syntax
+        run: python -m compileall -q frappe_paystack
+      - name: Undefined names and syntax errors
+        run: |
+          pip install --quiet "ruff==0.6.9"
+          ruff check --select E9,F63,F7,F82 --target-version py310 frappe_paystack .github/scripts
+      - name: Dependency boundary (core never imports ERPNext; required_apps = payments)
+        run: python .github/scripts/check_boundaries.py
+      - name: Merge conflict markers
+        run: |
+          if grep -rIl --exclude-dir=.git --exclude-dir=node_modules '^<<<<<<< ' .; then
+            echo "::error::merge conflict markers found"; exit 1
+          fi
+
+  vitest:
+    name: JavaScript unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test
+
+  server:
+    name: ${{ matrix.env }} (frappe ${{ matrix.frappe }}, Python ${{ matrix.python }})
+    needs: [static]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # E1: Frappe + Payments + frappe_paystack. No ERPNext anywhere.
+          - env: core
+            frappe: version-15
+            payments: version-15
+            python: '3.12'
+            node: 24
+            mariadb: '10.6'
+            extra_apps: ''
+            expect_apps: frappe payments frappe_paystack
+          - env: core
+            frappe: version-16
+            payments: version-16
+            python: '3.14'
+            node: 24
+            mariadb: '11.8'
+            extra_apps: ''
+            expect_apps: frappe payments frappe_paystack
+          - env: core
+            frappe: develop
+            payments: develop
+            python: '3.14'
+            node: 24
+            mariadb: '11.8'
+            extra_apps: ''
+            expect_apps: frappe payments frappe_paystack
+          # E2: + LMS (still no ERPNext).
+          - env: lms
+            frappe: version-15
+            payments: version-15
+            python: '3.12'
+            node: 24
+            mariadb: '10.6'
+            extra_apps: lms@version-15
+            expect_apps: frappe payments lms frappe_paystack
+          - env: lms
+            frappe: version-16
+            payments: version-16
+            python: '3.14'
+            node: 24
+            mariadb: '11.8'
+            extra_apps: lms@version-16
+            expect_apps: frappe payments lms frappe_paystack
+          - env: lms
+            frappe: develop
+            payments: develop
+            python: '3.14'
+            node: 24
+            mariadb: '11.8'
+            extra_apps: lms@develop
+            expect_apps: frappe payments lms frappe_paystack
+          # E3 + E4: ERPNext (+ Webshop) + Education.
+          - env: erpnext
+            frappe: version-15
+            payments: version-15
+            python: '3.12'
+            node: 24
+            mariadb: '10.6'
+            extra_apps: erpnext@version-15 webshop@version-15 education@version-15.2
+            expect_apps: frappe payments erpnext webshop education frappe_paystack
+          - env: erpnext
+            frappe: version-16
+            payments: version-16
+            python: '3.14'
+            node: 24
+            mariadb: '11.8'
+            extra_apps: erpnext@version-16 webshop@version-16 education@version-16
+            expect_apps: frappe payments erpnext webshop education frappe_paystack
+
+    env:
+      CI: 'Yes'
+      FRAPPE_BRANCH: ${{ matrix.frappe }}
+      PAYMENTS_BRANCH: ${{ matrix.payments }}
+      EXTRA_APPS: ${{ matrix.extra_apps }}
+      CYPRESS_INSTALL_BINARY: '0'
+
+    services:
+      redis-cache:
+        image: redis:alpine
+        ports:
+          - 13000:6379
+      redis-queue:
+        image: redis:alpine
+        ports:
+          - 11000:6379
+      mariadb:
+        image: mariadb:${{ matrix.mariadb }}
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized || mariadb-admin ping -proot" --health-interval=5s --health-timeout=5s --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: ${{ matrix.python }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install MariaDB client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+
+      - name: Build bench and install apps
+        env:
+          PYTHON_BIN: ${{ steps.python.outputs.python-path }}
+        run: bash .github/scripts/setup-bench.sh 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+
+      - name: Installed apps are exactly ${{ matrix.expect_apps }}
+        run: bash .github/scripts/assert-apps.sh ~/frappe-bench test_site ${{ matrix.expect_apps }} 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+
+      - name: Migrate twice (patches and schema sync are idempotent)
+        working-directory: /home/runner/frappe-bench
+        run: |
+          set -o pipefail
+          bench --site test_site migrate 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+          bench --site test_site migrate 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+
+      - name: Run the frappe_paystack suite
+        run: bash .github/scripts/run-tests.sh ~/frappe-bench test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+
+      - name: Show bench logs
+        if: ${{ failure() }}
+        run: tail -n 200 /home/runner/frappe-bench/logs/*.log || true
+
+      - name: Publish the failure log as annotations
+        if: ${{ failure() }}
+        run: python3 .github/scripts/annotate_failure.py "${RUNNER_TEMP}/ci.log" /home/runner/frappe-bench/logs
+
+  install:
+    name: Fresh install with assets (frappe ${{ matrix.frappe }}, Python ${{ matrix.python }})
+    needs: [static]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # erpnext_later: install ERPNext on the running site afterwards.
+          - frappe: version-15
+            payments: version-15
+            python: '3.12'
+            mariadb: '10.6'
+            erpnext_later: version-15
+          - frappe: version-16
+            payments: version-16
+            python: '3.14'
+            mariadb: '11.8'
+            erpnext_later: version-16
+          - frappe: develop
+            payments: develop
+            python: '3.14'
+            mariadb: '11.8'
+            erpnext_later: ''
+    env:
+      CI: 'Yes'
+      FRAPPE_BRANCH: ${{ matrix.frappe }}
+      PAYMENTS_BRANCH: ${{ matrix.payments }}
+      CYPRESS_INSTALL_BINARY: '0'
+    services:
+      redis-cache:
+        image: redis:alpine
+        ports:
+          - 13000:6379
+      redis-queue:
+        image: redis:alpine
+        ports:
+          - 11000:6379
+      mariadb:
+        image: mariadb:${{ matrix.mariadb }}
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized || mariadb-admin ping -proot" --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install MariaDB client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+      - name: Install like a user (assets built; only frappe_paystack installed explicitly)
+        env:
+          PYTHON_BIN: ${{ steps.python.outputs.python-path }}
+        run: bash .github/scripts/fresh-install.sh 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+      - name: Smoke-test the running site
+        run: bash .github/scripts/smoke-install.sh ~/frappe-bench test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+      - name: Install ERPNext afterwards, run the suite, remove ERPNext again
+        if: ${{ matrix.erpnext_later != '' }}
+        run: bash .github/scripts/erpnext-later.sh ~/frappe-bench test_site ${{ matrix.erpnext_later }} 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+      - name: Show server log
+        if: ${{ failure() }}
+        run: tail -n 100 /tmp/smoke-serve.log || true
+      - name: Publish the failure log as annotations
+        if: ${{ failure() }}
+        run: python3 .github/scripts/annotate_failure.py "${RUNNER_TEMP}/ci.log" /home/runner/frappe-bench/logs
+
+  upgrade:
+    name: Upgrade from upstream 15.5.0 (ERPNext, frappe version-15)
+    needs: [static]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CI: 'Yes'
+      FRAPPE_BRANCH: version-15
+      PAYMENTS_BRANCH: version-15
+      EXTRA_APPS: erpnext@version-15
+      PAYSTACK_SOURCE: https://github.com/mymi14s/frappe_paystack@version-15
+      CYPRESS_INSTALL_BINARY: '0'
+    services:
+      redis-cache:
+        image: redis:alpine
+        ports:
+          - 13000:6379
+      redis-queue:
+        image: redis:alpine
+        ports:
+          - 11000:6379
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized || mariadb-admin ping -proot" --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install MariaDB client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+      - name: Install upstream frappe_paystack 15.5.0 with ERPNext
+        env:
+          PYTHON_BIN: ${{ steps.python.outputs.python-path }}
+        run: bash .github/scripts/setup-bench.sh 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+      - name: Seed 15.5.0-shaped data
+        working-directory: /home/runner/frappe-bench/sites
+        run: ../env/bin/python "${GITHUB_WORKSPACE}/.github/scripts/upgrade_seed.py" test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+      - name: Switch the app to this commit and migrate
+        run: bash .github/scripts/switch-and-migrate.sh ~/frappe-bench test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+      - name: Verify statuses and preserved ERPNext data
+        working-directory: /home/runner/frappe-bench/sites
+        run: ../env/bin/python "${GITHUB_WORKSPACE}/.github/scripts/upgrade_verify.py" test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+      - name: Show bench logs
+        if: ${{ failure() }}
+        run: tail -n 200 /home/runner/frappe-bench/logs/*.log || true
+
+      - name: Publish the failure log as annotations
+        if: ${{ failure() }}
+        run: python3 .github/scripts/annotate_failure.py "${RUNNER_TEMP}/ci.log" /home/runner/frappe-bench/logs

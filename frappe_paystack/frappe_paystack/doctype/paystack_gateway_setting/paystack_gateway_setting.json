@@ -1,0 +1,204 @@
+{
+ "actions": [],
+ "autoname": "field:gateway",
+ "creation": "2024-04-24 17:59:27.773899",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "gateway",
+  "enabled",
+  "test_mode",
+  "column_break_mode",
+  "checkout_mode",
+  "payment_link_validity_hours",
+  "section_break_credentials",
+  "public_key",
+  "secret_key",
+  "column_break_credentials",
+  "webhook_secret",
+  "section_break_currencies",
+  "currency",
+  "column_break_currencies",
+  "additional_currencies",
+  "section_break_webhooks",
+  "webhook_help",
+  "column_break_webhooks",
+  "allowed_webhook_ips",
+  "section_break_options",
+  "save_card_authorizations",
+  "column_break_options",
+  "separate_payment_gateway"
+ ],
+ "fields": [
+  {
+   "fieldname": "gateway",
+   "fieldtype": "Data",
+   "label": "Account Name",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "description": "Identifies this Paystack account. The first enabled account is also reachable as the Payment Gateway \"Paystack\"."
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "0",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "test_mode",
+   "fieldtype": "Check",
+   "label": "Test Mode",
+   "default": "0",
+   "in_list_view": 1,
+   "description": "Required when the keys are Paystack test keys (sk_test_/pk_test_) and refused for live keys."
+  },
+  {
+   "fieldname": "column_break_mode",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "checkout_mode",
+   "fieldtype": "Select",
+   "label": "Checkout Mode",
+   "options": "Inline\nHosted",
+   "default": "Inline",
+   "description": "Inline opens the Paystack popup on this site's checkout page. Hosted redirects the payer to a Paystack-hosted page. Both are initialised on the server."
+  },
+  {
+   "fieldname": "payment_link_validity_hours",
+   "fieldtype": "Int",
+   "label": "Payment Link Validity (Hours)",
+   "default": "0",
+   "non_negative": 1,
+   "description": "Hours a checkout link stays payable. 0 keeps links open indefinitely. A payment that reaches Paystack after the link closed still settles."
+  },
+  {
+   "fieldname": "section_break_credentials",
+   "fieldtype": "Section Break",
+   "label": "Credentials"
+  },
+  {
+   "fieldname": "public_key",
+   "fieldtype": "Data",
+   "label": "Public Key",
+   "reqd": 1
+  },
+  {
+   "fieldname": "secret_key",
+   "fieldtype": "Password",
+   "label": "Secret Key",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_credentials",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "webhook_secret",
+   "fieldtype": "Password",
+   "label": "Webhook Secret (optional override)",
+   "description": "Paystack signs webhooks with the account's Secret Key. Set this only if you verify webhooks with a different secret."
+  },
+  {
+   "fieldname": "section_break_currencies",
+   "fieldtype": "Section Break",
+   "label": "Currencies"
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Account Currency",
+   "options": "Currency",
+   "reqd": 1,
+   "default": "NGN",
+   "in_list_view": 1,
+   "description": "The currency this Paystack account settles in."
+  },
+  {
+   "fieldname": "column_break_currencies",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "additional_currencies",
+   "fieldtype": "Small Text",
+   "label": "Additional Currencies",
+   "description": "Other currencies this account is enabled for on Paystack (for example USD), separated by commas. Supported: NGN, GHS, ZAR, KES, USD, XOF."
+  },
+  {
+   "fieldname": "section_break_webhooks",
+   "fieldtype": "Section Break",
+   "label": "Webhooks"
+  },
+  {
+   "fieldname": "webhook_help",
+   "fieldtype": "HTML",
+   "label": "Webhook URL"
+  },
+  {
+   "fieldname": "column_break_webhooks",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "allowed_webhook_ips",
+   "fieldtype": "Small Text",
+   "label": "Allowed Webhook IPs",
+   "description": "Optional. One IP address or CIDR range per line; empty allows all. Paystack documents 52.31.139.75, 52.49.173.169 and 52.214.14.220; confirm at https://paystack.com/docs/payments/webhooks before relying on the list."
+  },
+  {
+   "fieldname": "section_break_options",
+   "fieldtype": "Section Break",
+   "label": "Options"
+  },
+  {
+   "fieldname": "save_card_authorizations",
+   "fieldtype": "Check",
+   "label": "Save Reusable Cards",
+   "default": "0",
+   "description": "Store the reusable card authorization Paystack returns after a card payment, so the payer can be charged again (saved cards, subscriptions). Only enable this with the payer's consent."
+  },
+  {
+   "fieldname": "column_break_options",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "separate_payment_gateway",
+   "fieldtype": "Check",
+   "label": "Register as its own Payment Gateway",
+   "default": "0",
+   "description": "Also register this account as the Payment Gateway \"Paystack-<Account Name>\" so apps (for example LMS) can select it explicitly."
+  }
+ ],
+ "links": [],
+ "modified": "2026-09-25 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Frappe Paystack",
+ "name": "Paystack Gateway Setting",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "gateway",
+ "track_changes": 1,
+ "track_seen": 1,
+ "track_views": 1
+}
