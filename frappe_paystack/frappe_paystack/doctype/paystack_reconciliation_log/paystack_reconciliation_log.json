@@ -7,7 +7,7 @@
  "field_order": [
   "reconciliation_date",
   "payment_log",
-  "company",
+  "gateway_setting",
   "status",
   "column_break_amounts",
   "paystack_amount",
@@ -29,27 +29,28 @@
   {
    "fieldname": "payment_log",
    "fieldtype": "Link",
-   "label": "Payment Log",
+   "label": "Payment",
    "options": "Paystack Payment Log",
    "reqd": 1,
    "unique": 1
   },
   {
-   "fieldname": "company",
+   "fieldname": "gateway_setting",
    "fieldtype": "Link",
-   "label": "Company",
-   "options": "Company",
-   "read_only": 1,
-   "reqd": 1,
-   "search_index": 1
+   "label": "Paystack Account",
+   "options": "Paystack Gateway Setting",
+   "search_index": 1,
+   "read_only": 1
   },
   {
-   "default": "Pending",
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
    "options": "Pending\nReconciled\nMismatch\nManual Override",
-   "reqd": 1
+   "default": "Pending",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
   },
   {
    "fieldname": "column_break_amounts",
@@ -64,7 +65,7 @@
   {
    "fieldname": "frappe_amount",
    "fieldtype": "Currency",
-   "label": "Frappe Amount",
+   "label": "Recorded Amount",
    "read_only": 1
   },
   {
@@ -104,29 +105,33 @@
  ],
  "in_create": 1,
  "links": [],
- "modified": "2026-07-31 20:45:00.000000",
+ "modified": "2026-09-25 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Frappe Paystack",
  "name": "Paystack Reconciliation Log",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {
-   "read": 1,
-   "report": 1,
    "role": "System Manager",
-   "write": 1
-  },
-  {
    "read": 1,
+   "write": 1,
    "report": 1,
-   "role": "Accounts Manager"
+   "export": 1,
+   "print": 1
   },
   {
+   "role": "Paystack Manager",
    "read": 1,
-   "role": "Accounts User"
+   "write": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
+ "states": [],
  "track_changes": 1
 }

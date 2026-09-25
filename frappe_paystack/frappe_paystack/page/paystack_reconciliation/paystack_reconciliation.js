@@ -97,7 +97,7 @@ frappe_paystack.ReconciliationDashboard = class ReconciliationDashboard {
 				return `
 				<tr>
 					<td>${link}</td>
-					<td>${frappe.utils.escape_html(row.company || "")}</td>
+					<td>${frappe.utils.escape_html(row.gateway_setting || "")}</td>
 					<td><span class="indicator-pill ${this.indicator(row.status)}">
 						${frappe.utils.escape_html(row.status || "")}</span></td>
 					<td class="text-right">${format_currency(row.paystack_amount)}</td>
@@ -113,11 +113,11 @@ frappe_paystack.ReconciliationDashboard = class ReconciliationDashboard {
 			<table class="table table-bordered">
 				<thead>
 					<tr>
-						<th>${__("Payment Log")}</th>
-						<th>${__("Company")}</th>
+						<th>${__("Payment")}</th>
+						<th>${__("Paystack Account")}</th>
 						<th>${__("Status")}</th>
 						<th class="text-right">${__("Paystack")}</th>
-						<th class="text-right">${__("ERPNext")}</th>
+						<th class="text-right">${__("Recorded")}</th>
 						<th class="text-right">${__("Difference")}</th>
 						<th>${__("Reason")}</th>
 						<th>${__("Reconciled At")}</th>

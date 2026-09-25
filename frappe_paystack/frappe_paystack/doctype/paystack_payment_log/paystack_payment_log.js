@@ -1,183 +1,128 @@
-const COMPLETE_PAYMENT =
-	"frappe_paystack.frappe_paystack.doctype.paystack_payment_log.paystack_payment_log.complete_payment";
+const PAYSTACK_STATUS_COLORS = {
+	Pending: "orange",
+	Paid: "green",
+	Failed: "red",
+	Cancelled: "gray",
+	Expired: "gray",
+	"Needs Attention": "red",
+	"Partially Refunded": "yellow",
+	Refunded: "purple",
+};
 
-const COMPLETION_EVENT = "paystack_payment_completed";
-
-// Log statuses holding captured money that no Payment Entry has booked yet.
-const COMPLETABLE_STATUSES = ["Processed", "Needs Attention"];
+const CAPTURED = ["Paid", "Partially Refunded", "Refunded"];
 
 frappe.ui.form.on("Paystack Payment Log", {
-	onload(frm) {
-		frappe.realtime.on(COMPLETION_EVENT, (data) => {
-			report_completion(frm, data);
-		});
-	},
-
 	refresh(frm) {
 		frm.trigger("decorate");
 		frm.trigger("action_buttons");
 	},
 
-	status(frm) {
-		frm.trigger("decorate");
-	},
-
 	decorate(frm) {
-		const s = frm.doc.status || "Pending";
-		const color = {
-			Pending: "orange",
-			Processed: "blue",
-			"Needs Attention": "red",
-			Completed: "green",
-			"Partially Refunded": "yellow",
-			Refunded: "purple",
-			Failed: "red",
-		}[s] || "gray";
+		const status = frm.doc.status || "Pending";
 		frm.dashboard.clear_headline();
-		frm.dashboard.set_headline_alert(
-			__('Status: <strong style="text-transform:uppercase">{0}</strong>', [s]),
-			color
-		);
+		let message = __("Status: <strong>{0}</strong>", [__(status)]);
+		if (CAPTURED.includes(status) && frm.doc.notification_status !== "Notified") {
+			message += " &middot; " + __("Application notification: {0}", [__(frm.doc.notification_status)]);
+		}
+		frm.dashboard.set_headline_alert(message, PAYSTACK_STATUS_COLORS[status] || "gray");
 	},
 
 	action_buttons(frm) {
-		if (settlement_outstanding(frm)) {
-			frm.add_custom_button(__("Complete Payment"), () => {
-				complete_payment(frm);
-			}, __("Actions"));
+		const group = __("Paystack");
+
+		frm.add_custom_button(
+			__("Verify with Paystack"),
+			() =>
+				frm.call("verify_with_paystack").then((r) => {
+					const result = r.message || {};
+					frappe.show_alert({
+						message: __("Status: {0}", [__(result.status || frm.doc.status)]),
+						indicator: CAPTURED.includes(result.status) ? "green" : "blue",
+					});
+					frm.reload_doc();
+				}),
+			group
+		);
+
+		if (
+			CAPTURED.includes(frm.doc.status) &&
+			["Pending", "Failed", "Needs Attention"].includes(frm.doc.notification_status)
+		) {
+			frm.add_custom_button(
+				__("Retry Notification"),
+				() =>
+					frm.call("retry_notification").then(() => frm.reload_doc()),
+				group
+			);
+			frm.add_custom_button(
+				__("Mark Notification Resolved"),
+				() =>
+					frappe.prompt(
+						{ fieldtype: "Small Text", fieldname: "note", label: __("How was it resolved?"), reqd: 1 },
+						(values) =>
+							frm
+								.call("mark_notification_resolved", { note: values.note })
+								.then(() => frm.reload_doc()),
+						__("Mark Notification Resolved")
+					),
+				group
+			);
 		}
 
-		if (!frm.doc.transaction_id) {
-			return;
+		if (frm.doc.transaction_id) {
+			frm.add_custom_button(
+				__("Open in Paystack"),
+				() =>
+					window.open(
+						`https://dashboard.paystack.com/#/transactions/${encodeURIComponent(frm.doc.transaction_id)}/analytics`,
+						"_blank",
+						"noopener"
+					),
+				group
+			);
 		}
 
-		frm.add_custom_button(__("Open in Paystack"), () => {
-			const url = `https://dashboard.paystack.com/#/transactions/${frm.doc.transaction_id}/analytics`;
-			window.open(url, "_blank");
-		}, __("Actions"));
+		const refundable = flt(frm.doc.amount_paid) - flt(frm.doc.total_refunded);
+		if (["Paid", "Partially Refunded"].includes(frm.doc.status) && refundable > 0) {
+			frm.add_custom_button(__("Refund"), () => show_refund_dialog(frm, refundable), group);
+		}
 
-		frm.add_custom_button(__("Verify Transaction"), () => {
-			frm.call("validate_payment").then((res) => {
-				if (res.message && res.message.message) {
-					frappe.msgprint(res.message.message);
-				}
-			});
-		}, __("Actions"));
-
-		if (refundable_amount(frm) > 0) {
-			frm.add_custom_button(__("Refund"), () => {
-				show_refund_dialog(frm);
-			}, __("Actions"));
+		if (frm.doc.status === "Pending") {
+			frm.add_custom_button(
+				__("Copy Payment Link"),
+				() => frappe.utils.copy_to_clipboard(`${window.location.origin}/paystack-checkout/${frm.doc.name}`),
+				group
+			);
 		}
 	},
 });
 
-function settlement_outstanding(frm) {
-	return COMPLETABLE_STATUSES.includes(frm.doc.status) && !frm.doc.payment_entry;
-}
-
-function complete_payment(frm) {
-	if (frm.paystack_completing) {
-		return;
-	}
-
-	frm.paystack_completing = true;
-	frappe.call({
-		method: COMPLETE_PAYMENT,
-		args: { payment_log_name: frm.doc.name },
-	}).then((r) => {
-		if (!r.message) {
-			frm.paystack_completing = false;
-			return;
-		}
-		frappe.show_alert({
-			message: __("Verifying this payment with Paystack..."),
-			indicator: "blue",
-		});
-	}).catch(() => {
-		frm.paystack_completing = false;
-	});
-}
-
-function report_completion(frm, data) {
-	if (!data || data.log !== frm.doc.name) {
-		return;
-	}
-
-	frm.paystack_completing = false;
-
-	if (!data.booked) {
-		frappe.msgprint({
-			title: __("Payment not completed"),
-			message: data.message,
-			indicator: "red",
-		});
-		return;
-	}
-
-	frappe.show_alert({ message: data.message, indicator: "green" });
-	frm.reload_doc();
-}
-
-function refundable_amount(frm) {
-	const settled = ["Completed", "Partially Refunded"].includes(frm.doc.status);
-	if (!settled) {
-		return 0;
-	}
-	return flt(frm.doc.amount_paid) - flt(frm.doc.total_refunded);
-}
-
-function show_refund_dialog(frm) {
-	const maxRefund = refundable_amount(frm);
-	// The refundable balance is held in the currency Paystack settled in.
-	const chargeCurrency = frm.doc.currency_paid || frm.doc.currency;
-
+function show_refund_dialog(frm, maxRefund) {
+	const currency = frm.doc.currency_paid || frm.doc.currency;
 	const dialog = new frappe.ui.Dialog({
-		title: __("Initiate Refund"),
+		title: __("Refund"),
 		fields: [
 			{
 				fieldtype: "Currency",
 				fieldname: "amount",
-				label: __("Refund Amount"),
-				reqd: 1,
+				label: __("Amount"),
+				options: currency,
 				default: maxRefund,
-				description: __("Maximum refundable: {0}", [
-					format_currency(maxRefund, chargeCurrency),
-				]),
+				reqd: 1,
+				description: __("Refundable: {0}", [format_currency(maxRefund, currency)]),
 			},
-			{
-				fieldtype: "Small Text",
-				fieldname: "reason",
-				label: __("Reason"),
-			},
+			{ fieldtype: "Small Text", fieldname: "reason", label: __("Reason") },
 		],
 		primary_action_label: __("Refund"),
 		primary_action(values) {
 			if (values.amount <= 0 || values.amount > maxRefund) {
-				frappe.throw(
-					__("Amount must be greater than 0 and at most {0}", [
-						format_currency(maxRefund, chargeCurrency),
-					])
-				);
+				frappe.msgprint(__("Enter an amount between 0 and {0}.", [format_currency(maxRefund, currency)]));
 				return;
 			}
-
-			frappe.call({
-				method: "frappe_paystack.api.initiate_refund_from_log",
-				args: {
-					payment_log_name: frm.doc.name,
-					amount: values.amount,
-					reason: values.reason,
-				},
-			}).then((r) => {
-				if (r.message) {
-					frappe.show_alert({
-						message: __("Refund initiated: {0}", [r.message]),
-						indicator: "blue",
-					});
-					dialog.hide();
-					frm.refresh();
-				}
+			frm.call("refund", { amount: values.amount, reason: values.reason }).then((r) => {
+				dialog.hide();
+				frappe.show_alert({ message: __("Refund {0} requested", [r.message]), indicator: "blue" });
+				frm.reload_doc();
 			});
 		},
 	});

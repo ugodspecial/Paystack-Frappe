@@ -4,12 +4,11 @@
 frappe.query_reports["Paystack Activity"] = {
 	filters: [
 		{
-			fieldname: "company",
-			label: __("Company"),
+			fieldname: "gateway_setting",
+			label: __("Paystack Account"),
 			fieldtype: "Link",
-			options: "Company",
+			options: "Paystack Gateway Setting",
 			reqd: 0,
-			default: frappe.defaults.get_user_default("Company"),
 		},
 		{
 			fieldname: "from_date",

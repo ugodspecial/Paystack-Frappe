@@ -11,16 +11,15 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
-from frappe_paystack.utils import PAYSTACK_SERVICE, check_company_permission
-from frappe_paystack.utils.reconciliation_api import apply_company_filter, permitted_companies
+from frappe_paystack.core.constants import CAPTURED_STATUSES, PAYSTACK_SERVICE
 
 PAYMENT_LOG = "Paystack Payment Log"
 REFUND_LOG = "Paystack Refund Log"
 SETTLEMENT = "Paystack Settlement"
 INTEGRATION_REQUEST = "Integration Request"
 
-# Doctypes an Integration Request can name that carry a company of their own.
-COMPANY_SOURCES = (PAYMENT_LOG, REFUND_LOG, SETTLEMENT)
+# Doctypes an Integration Request can name that carry an account of their own.
+ACCOUNT_SOURCES = (PAYMENT_LOG, SETTLEMENT)
 
 # Maximum rows the feed returns.
 ACTIVITY_LIMIT = 500
@@ -63,10 +62,10 @@ def get_columns() -> list:
         },
         {"label": _("Status"), "fieldname": "status", "fieldtype": "Data", "width": 110},
         {
-            "label": _("Company"),
-            "fieldname": "company",
+            "label": _("Paystack Account"),
+            "fieldname": "account",
             "fieldtype": "Link",
-            "options": "Company",
+            "options": "Paystack Gateway Setting",
             "width": 150,
         },
         {
@@ -110,38 +109,37 @@ def creation_condition(filters: dict) -> Optional[list]:
     return None
 
 
-def base_filters(filters: dict, company: bool = True) -> dict:
-    """
-    Return the window and tenant conditions every source shares.
-
-    A feed asking for no company in particular is narrowed to the ones the
-    caller may read.
-    """
+def base_filters(filters: dict, account: bool = True) -> dict:
+    """Return the window (and account) conditions every source shares."""
     conditions = {}
 
     creation = creation_condition(filters)
     if creation:
         conditions["creation"] = creation
 
-    if not company:
-        return conditions
+    if account and filters.get("gateway_setting"):
+        conditions["gateway_setting"] = filters["gateway_setting"]
+    return conditions
 
-    if filters.get("company"):
-        conditions["company"] = filters["company"]
-        return conditions
 
-    return apply_company_filter(conditions)
+def optional_fields(doctype: str, *fields: str) -> list:
+    """Adapter-owned fields (e.g. ERPNext booking) that exist on this site."""
+    meta = frappe.get_meta(doctype)
+    return [field for field in fields if meta.has_field(field)]
 
 
 def payment_severity(log: Any) -> str:
     """
-    Grade a capture.
+    Grade a payment.
 
-    Processed with no Payment Entry warns; Failed and Needs Attention are errors.
+    Failed and Needs Attention are errors. A capture whose application was not
+    told (or, with ERPNext, not booked) warns.
     """
     if log.status in ("Failed", "Needs Attention"):
         return ERROR
-    if log.status == "Processed" and not log.payment_entry:
+    if log.status in CAPTURED_STATUSES and (
+        log.notification_status in ("Failed", "Needs Attention") or log.get("booking_status") in ("Pending", "Needs Attention")
+    ):
         return WARNING
     return INFO
 
@@ -155,15 +153,19 @@ def payment_rows(filters: dict) -> list:
         fields=[
             "name",
             "creation",
-            "company",
+            "gateway_setting",
             "status",
+            "amount",
+            "currency",
             "amount_paid",
             "currency_paid",
-            "payment_entry",
+            "notification_status",
+            "notification_error",
             "linked_doctype",
             "linked_docname",
             "errors",
-        ],
+        ]
+        + optional_fields(PAYMENT_LOG, "booking_status"),
     ):
         rows.append(
             {
@@ -173,10 +175,11 @@ def payment_rows(filters: dict) -> list:
                 "source_doctype": PAYMENT_LOG,
                 "record": log.name,
                 "status": log.status,
-                "company": log.company,
-                "amount": flt(log.amount_paid),
-                "currency": log.currency_paid,
+                "account": log.gateway_setting,
+                "amount": flt(log.amount_paid or log.amount),
+                "currency": log.currency_paid or log.currency,
                 "detail": one_line(log.errors)
+                or one_line(log.notification_error)
                 or f"{log.linked_doctype or ''} {log.linked_docname or ''}".strip(),
             }
         )
@@ -184,10 +187,10 @@ def payment_rows(filters: dict) -> list:
 
 
 def refund_severity(log: Any) -> str:
-    """Grade a refund; Pending means the customer is still waiting on Paystack."""
+    """Grade a refund; Pending/Processing means the payer is still waiting on Paystack."""
     if log.status == "Failed":
         return ERROR
-    if log.status == "Pending":
+    if log.status in ("Pending", "Processing"):
         return WARNING
     return INFO
 
@@ -197,11 +200,10 @@ def refund_rows(filters: dict) -> list:
     rows = []
     for log in frappe.get_all(
         REFUND_LOG,
-        filters=base_filters(filters),
+        filters=base_filters(filters, account=False),
         fields=[
             "name",
             "creation",
-            "company",
             "status",
             "refund_amount",
             "currency",
@@ -218,7 +220,7 @@ def refund_rows(filters: dict) -> list:
                 "source_doctype": REFUND_LOG,
                 "record": log.name,
                 "status": log.status,
-                "company": log.company,
+                "account": None,
                 "amount": flt(log.refund_amount),
                 "currency": log.currency,
                 "detail": one_line(log.errors) or one_line(log.refund_reason) or log.payment_log,
@@ -231,11 +233,11 @@ def settlement_severity(payout: Any) -> str:
     """
     Grade a payout.
 
-    A payout with no journal entry warns; a failed or errored one is an error.
+    An errored payout is an error; with ERPNext, one not booked yet warns.
     """
-    if payout.status == "Failed" or payout.errors:
+    if payout.errors or payout.get("booking_status") == "Failed":
         return ERROR
-    if not payout.journal_entry:
+    if payout.get("booking_status") == "Pending":
         return WARNING
     return INFO
 
@@ -246,16 +248,8 @@ def settlement_rows(filters: dict) -> list:
     for payout in frappe.get_all(
         SETTLEMENT,
         filters=base_filters(filters),
-        fields=[
-            "name",
-            "creation",
-            "company",
-            "status",
-            "net_amount",
-            "currency",
-            "journal_entry",
-            "errors",
-        ],
+        fields=["name", "creation", "gateway_setting", "paystack_status", "net_amount", "currency", "errors"]
+        + optional_fields(SETTLEMENT, "journal_entry", "booking_status"),
     ):
         rows.append(
             {
@@ -264,35 +258,25 @@ def settlement_rows(filters: dict) -> list:
                 "source": _("Payout"),
                 "source_doctype": SETTLEMENT,
                 "record": payout.name,
-                "status": payout.status,
-                "company": payout.company,
+                "status": payout.get("booking_status") or payout.paystack_status,
+                "account": payout.gateway_setting,
                 "amount": flt(payout.net_amount),
                 "currency": payout.currency,
-                "detail": one_line(payout.errors)
-                or payout.journal_entry
-                or _("Not posted: no journal entry cleared this payout."),
+                "detail": one_line(payout.errors) or payout.get("journal_entry") or "",
             }
         )
     return rows
 
 
-def request_companies(requests: list) -> dict:
-    """Return the company behind each referenced record, keyed by (doctype, name)."""
-    companies = {}
-
-    for doctype in COMPANY_SOURCES:
-        names = {
-            request.reference_docname
-            for request in requests
-            if request.reference_doctype == doctype and request.reference_docname
-        }
-        if not names:
-            continue
-
-        for row in frappe.get_all(doctype, filters={"name": ["in", list(names)]}, fields=["name", "company"]):
-            companies[(doctype, row.name)] = row.company
-
-    return companies
+def request_accounts(requests: list) -> dict:
+    """Return the Paystack account behind each referenced record, keyed by (doctype, name)."""
+    accounts = {}
+    for doctype in ACCOUNT_SOURCES:
+        names = {r.reference_docname for r in requests if r.reference_doctype == doctype and r.reference_docname}
+        if names:
+            for row in frappe.get_all(doctype, filters={"name": ["in", list(names)]}, fields=["name", "gateway_setting"]):
+                accounts[(doctype, row.name)] = row.gateway_setting
+    return accounts
 
 
 def request_error(request: Any) -> str:
@@ -305,9 +289,9 @@ def request_rows(filters: dict) -> list:
     """
     Return the Paystack API calls in range, including unattributable ones.
 
-    A call with no resolvable company is kept under any company filter.
+    A call with no resolvable account is kept under any account filter.
     """
-    conditions = base_filters(filters, company=False)
+    conditions = base_filters(filters, account=False)
     conditions["integration_request_service"] = PAYSTACK_SERVICE
 
     requests = frappe.get_all(
@@ -324,17 +308,13 @@ def request_rows(filters: dict) -> list:
         ],
     )
 
-    companies = request_companies(requests)
-    company = filters.get("company")
-    allowed = permitted_companies()
+    accounts = request_accounts(requests)
+    account = filters.get("gateway_setting")
 
     rows = []
     for request in requests:
-        owner = companies.get((request.reference_doctype, request.reference_docname))
-        if company and owner and owner != company:
-            continue
-
-        if allowed and owner and owner not in allowed:
+        owner = accounts.get((request.reference_doctype, request.reference_docname))
+        if account and owner and owner != account:
             continue
 
         rows.append(
@@ -345,7 +325,7 @@ def request_rows(filters: dict) -> list:
                 "source_doctype": INTEGRATION_REQUEST,
                 "record": request.name,
                 "status": request.status,
-                "company": owner,
+                "account": owner,
                 "amount": None,
                 "currency": None,
                 "detail": request_error(request) or request.url,
@@ -383,7 +363,6 @@ def get_data(filters: dict) -> list:
 
 def execute(filters: Optional[dict] = None) -> tuple:
     filters = filters or {}
-    if filters.get("company"):
-        check_company_permission(filters["company"])
-
+    if not frappe.has_permission(PAYMENT_LOG, "read"):
+        frappe.throw(_("Not permitted"), frappe.PermissionError)
     return get_columns(), get_data(filters)

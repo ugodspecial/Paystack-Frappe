@@ -10,8 +10,12 @@ from typing import Any, Optional
 import frappe
 from frappe.utils import flt
 
-from frappe_paystack.utils.payment_request import BILLABLE_DOCTYPES, PAYMENT_GATEWAY
-from frappe_paystack.utils.reconciliation import MANUAL_OVERRIDE, RECONCILIATION_LOG
+from frappe_paystack.core.constants import RECONCILIATION_LOG
+from frappe_paystack.core.reconciliation import MANUAL_OVERRIDE
+
+# ERPNext names; used only when ERPNext is installed (see backfill_payment_requests).
+BILLABLE_DOCTYPES = ("Sales Order", "Sales Invoice")
+PAYMENT_GATEWAY = "Paystack"
 
 PAYMENT_LOG = "Paystack Payment Log"
 PAYMENT_REQUEST = "Payment Request"
@@ -148,8 +152,14 @@ def rename_manual_overrides() -> list:
     return renamed
 
 
+def _has_columns(doctype: str, *columns: str) -> bool:
+    return all(frappe.db.has_column(doctype, column) for column in columns)
+
+
 def stuck_payment_logs() -> list:
-    """Return the logs holding a capture no Payment Entry has booked, unstamped."""
+    """Return the logs holding a capture no Payment Entry has booked, unstamped (15.x data)."""
+    if not _has_columns(PAYMENT_LOG, "payment_entry", "last_retry", "retry_count"):
+        return []
     return frappe.get_all(
         PAYMENT_LOG,
         filters={
@@ -252,10 +262,12 @@ def backfill_payment_requests(company: Optional[str] = None, dry_run: bool = Fal
     Link payment logs to the Payment Request they collected.
 
     Returns a report of the logs examined, linked, ambiguous and unmatched. Each
-    request goes to at most one log.
+    request goes to at most one log. Does nothing without ERPNext.
     """
     claimed = set()
     report: dict[str, Any] = {"examined": 0, "linked": [], "ambiguous": [], "unmatched": []}
+    if "erpnext" not in frappe.get_installed_apps() or not _has_columns(PAYMENT_LOG, "payment_request", "company"):
+        return report
 
     for log in unlinked_logs(company):
         report["examined"] += 1
@@ -287,6 +299,8 @@ def backfill_payment_requests(company: Optional[str] = None, dry_run: bool = Fal
 
 def linkage_report(company: Optional[str] = None) -> dict:
     """Return the billable, linked and unlinked payment log counts."""
+    if not _has_columns(PAYMENT_LOG, "payment_request", "company"):
+        return {"billable_logs": 0, "linked": 0, "unlinked": 0}
     billable = {
         "linked_doctype": ["in", list(BILLABLE_DOCTYPES)],
         **company_filter(company),

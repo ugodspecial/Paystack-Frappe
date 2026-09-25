@@ -11,7 +11,7 @@ AMOUNT_TOLERANCE = 0.01
 
 
 class PaystackReconciliationLog(Document):
-    """Holds the reconciliation status of a Paystack payment against ERPNext."""
+    """Holds the reconciliation status of a Paystack payment against Paystack's own record."""
 
     def validate(self) -> None:
         """Check the amounts and set the difference from them."""

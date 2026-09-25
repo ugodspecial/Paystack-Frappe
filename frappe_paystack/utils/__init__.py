@@ -1,75 +1,51 @@
-"""Gateway settings, the Paystack HTTP calls and the shared failure reporting."""
+"""
+Compatibility facade for code written against frappe_paystack 15.x.
 
-from frappe_paystack.utils.utils import (
-    PAYSTACK_SERVICE,
-    SUPPORTED_CURRENCIES,
-    charge_authorization,
-    charge_currency,
-    check_company_permission,
-    coalesce_currency,
-    customer_email,
-    discard_draft_payment_entry,
-    ensure_supported_currency,
-    error_log_link,
-    from_minor_units,
-    get_company_row_settings,
-    get_customer_email,
-    get_gateway_secret,
-    hmac_sha512,
-    initialize_transaction,
-    initiate_refund,
-    is_ip_allowed,
-    is_paystack_enabled,
-    log_error_for,
-    log_integration_request,
-    normalize_currency,
-    outstanding_rate,
-    parse_paystack_response,
-    party_account_for,
-    party_account_rate,
-    record_failure,
-    redact_authorization,
-    request_pos_charge,
-    resolve_paystack_settings,
-    resolve_settings_for_signature,
-    to_minor_units,
-    validate_payment,
-    verify_signature,
-)
+`from frappe_paystack.utils import X` keeps working, but nothing is imported
+until a name is used (PEP 562), so importing this package never imports
+ERPNext. Generic helpers resolve to frappe_paystack.core; ERPNext helpers
+resolve to frappe_paystack.integrations.erpnext and need ERPNext installed.
+"""
 
-__all__ = [
-    "PAYSTACK_SERVICE",
-    "SUPPORTED_CURRENCIES",
-    "charge_authorization",
-    "charge_currency",
-    "check_company_permission",
-    "coalesce_currency",
-    "customer_email",
-    "discard_draft_payment_entry",
-    "ensure_supported_currency",
-    "error_log_link",
-    "from_minor_units",
-    "get_company_row_settings",
-    "get_customer_email",
-    "get_gateway_secret",
-    "hmac_sha512",
-    "initialize_transaction",
-    "initiate_refund",
-    "is_ip_allowed",
-    "is_paystack_enabled",
-    "log_error_for",
-    "log_integration_request",
-    "normalize_currency",
-    "outstanding_rate",
-    "parse_paystack_response",
-    "party_account_for",
-    "party_account_rate",
-    "record_failure",
-    "redact_authorization",
-    "request_pos_charge",
-    "resolve_paystack_settings",
-    "resolve_settings_for_signature",
-    "to_minor_units",
-    "validate_payment",
-    "verify_signature",
-]
+from importlib import import_module
+
+_LOCATIONS = {
+    # generic
+    "PAYSTACK_SERVICE": "frappe_paystack.core.constants",
+    "SUPPORTED_CURRENCIES": "frappe_paystack.core.money",
+    "hmac_sha512": "frappe_paystack.core.accounts",
+    "verify_signature": "frappe_paystack.core.accounts",
+    "is_ip_allowed": "frappe_paystack.core.accounts",
+    "log_integration_request": "frappe_paystack.core.logging",
+    "log_error_for": "frappe_paystack.core.logging",
+    "record_failure": "frappe_paystack.core.logging",
+    "error_log_link": "frappe_paystack.core.logging",
+    "redact_authorization": "frappe_paystack.utils.utils",
+    "to_minor_units": "frappe_paystack.utils.utils",
+    "from_minor_units": "frappe_paystack.utils.utils",
+    "ensure_supported_currency": "frappe_paystack.utils.utils",
+    "normalize_currency": "frappe_paystack.utils.utils",
+    "parse_paystack_response": "frappe_paystack.utils.utils",
+    "resolve_settings_for_signature": "frappe_paystack.utils.utils",
+    "get_gateway_secret": "frappe_paystack.utils.utils",
+    # ERPNext (via the adapter)
+    "resolve_paystack_settings": "frappe_paystack.utils.utils",
+    "is_paystack_enabled": "frappe_paystack.utils.utils",
+    "get_company_row_settings": "frappe_paystack.utils.utils",
+    "customer_email": "frappe_paystack.integrations.erpnext.accounts",
+    "get_customer_email": "frappe_paystack.integrations.erpnext.accounts",
+    "check_company_permission": "frappe_paystack.integrations.erpnext.accounts",
+    "party_account_for": "frappe_paystack.integrations.erpnext.accounts",
+    "party_account_rate": "frappe_paystack.integrations.erpnext.accounts",
+    "outstanding_rate": "frappe_paystack.integrations.erpnext.accounts",
+    "discard_draft_payment_entry": "frappe_paystack.integrations.erpnext.accounts",
+}
+
+__all__ = sorted(_LOCATIONS)
+
+
+def __getattr__(name):
+    module = _LOCATIONS.get(name)
+    if not module:
+        raise AttributeError(f"module 'frappe_paystack.utils' has no attribute {name!r}")
+    return getattr(import_module(module), name)

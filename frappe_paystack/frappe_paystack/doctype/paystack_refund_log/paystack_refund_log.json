@@ -5,18 +5,19 @@
  "engine": "InnoDB",
  "field_order": [
   "payment_log",
-  "company",
   "linked_doctype",
   "linked_docname",
   "transaction_id",
-  "column_break_refund",
+  "column_break_amount",
   "refund_amount",
   "currency",
   "status",
   "refund_reference",
+  "section_break_details",
   "refund_reason",
-  "section_break_response",
-  "reversal_payment_entry",
+  "requested_by",
+  "processed_at",
+  "column_break_details",
   "integration_request",
   "raw_response",
   "tab_break_errors",
@@ -26,31 +27,26 @@
   {
    "fieldname": "payment_log",
    "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Payment Log",
+   "label": "Payment",
    "options": "Paystack Payment Log",
    "reqd": 1,
-   "search_index": 1
-  },
-  {
-   "fieldname": "company",
-   "fieldtype": "Link",
+   "search_index": 1,
    "in_list_view": 1,
-   "label": "Company",
-   "options": "Company",
-   "reqd": 1,
-   "fetch_from": "payment_log.company",
    "read_only": 1
   },
   {
    "fieldname": "linked_doctype",
-   "fieldtype": "Data",
-   "label": "Linked Doctype"
+   "fieldtype": "Link",
+   "label": "Reference DocType",
+   "options": "DocType",
+   "read_only": 1
   },
   {
    "fieldname": "linked_docname",
-   "fieldtype": "Data",
-   "label": "Linked Docname"
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Name",
+   "options": "linked_doctype",
+   "read_only": 1
   },
   {
    "fieldname": "transaction_id",
@@ -59,15 +55,17 @@
    "read_only": 1
   },
   {
-   "fieldname": "column_break_refund",
+   "fieldname": "column_break_amount",
    "fieldtype": "Column Break"
   },
   {
    "fieldname": "refund_amount",
    "fieldtype": "Currency",
-   "in_list_view": 1,
    "label": "Refund Amount",
-   "reqd": 1
+   "options": "currency",
+   "reqd": 1,
+   "in_list_view": 1,
+   "read_only": 1
   },
   {
    "fieldname": "currency",
@@ -76,36 +74,52 @@
    "read_only": 1
   },
   {
-   "default": "Pending",
    "fieldname": "status",
    "fieldtype": "Select",
-   "in_list_view": 1,
    "label": "Status",
-   "options": "Pending\nProcessed\nCompleted\nFailed"
+   "options": "Pending\nProcessing\nProcessed\nFailed",
+   "default": "Pending",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
   },
   {
    "fieldname": "refund_reference",
    "fieldtype": "Data",
-   "label": "Refund Reference",
-   "read_only": 1
+   "label": "Paystack Refund ID",
+   "search_index": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "section_break_details",
+   "fieldtype": "Section Break",
+   "label": "Details"
   },
   {
    "fieldname": "refund_reason",
    "fieldtype": "Small Text",
-   "label": "Refund Reason"
+   "label": "Reason",
+   "read_only": 1
   },
   {
-   "fieldname": "section_break_response",
-   "fieldtype": "Section Break",
-   "label": "Response"
-  },
-  {
-   "fieldname": "reversal_payment_entry",
+   "fieldname": "requested_by",
    "fieldtype": "Link",
-   "label": "Reversal Payment Entry",
-   "options": "Payment Entry",
+   "label": "Requested By",
+   "options": "User",
    "read_only": 1,
    "no_copy": 1
+  },
+  {
+   "fieldname": "processed_at",
+   "fieldtype": "Datetime",
+   "label": "Processed At",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_break_details",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "integration_request",
@@ -117,10 +131,11 @@
   },
   {
    "fieldname": "raw_response",
-   "fieldtype": "Text",
-   "label": "Raw Response",
+   "fieldtype": "Code",
+   "label": "Paystack Response",
    "options": "JSON",
-   "read_only": 1
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "tab_break_errors",
@@ -131,39 +146,39 @@
    "fieldname": "errors",
    "fieldtype": "Small Text",
    "label": "Errors",
-   "read_only": 1
+   "read_only": 1,
+   "no_copy": 1
   }
  ],
  "in_create": 1,
  "links": [],
- "modified": "2026-07-30 00:00:00.000000",
+ "modified": "2026-09-25 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Frappe Paystack",
  "name": "Paystack Refund Log",
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
    "role": "System Manager",
-   "write": 1
+   "read": 1,
+   "write": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
   },
   {
-   "print": 1,
+   "role": "Paystack Manager",
    "read": 1,
    "report": 1,
-   "role": "Accounts Manager"
-  },
-  {
+   "export": 1,
    "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Accounts User"
+   "email": 1
   }
  ],
  "row_format": "Dynamic",
+ "search_fields": "payment_log,refund_reference",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],

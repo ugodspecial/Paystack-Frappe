@@ -1,124 +1,80 @@
 # Copyright (c) 2025, Anthony Emmanuel and contributors
 # For license information, please see license.txt
 
+"""Transactions as Paystack reports them for one account (live API query)."""
+
 from typing import Optional
 
 import frappe
-import requests
 from frappe import _
-from frappe.utils import flt
 
-from frappe_paystack.utils import check_company_permission, get_gateway_secret
+from frappe_paystack.core import money
+from frappe_paystack.core.client import client_for
+from frappe_paystack.core.constants import GATEWAY_SETTING, PAYMENT_LOG
+from frappe_paystack.core.permissions import can_move_money
 
-GATEWAY_DOCTYPE = "Paystack Gateway Setting"
+GATEWAY_DOCTYPE = GATEWAY_SETTING
 
 
 def execute(filters: Optional[dict] = None) -> tuple:
     filters = filters or {}
-    columns = get_columns()
-    data = get_data(filters)
-    return columns, data
-
-
-def gateway_company(gateway: Optional[str]) -> Optional[str]:
-    """Return the company whose Paystack account a gateway setting collects for."""
-    return frappe.db.get_value(GATEWAY_DOCTYPE, gateway, "company")
+    return get_columns(), get_data(filters)
 
 
 def get_columns() -> list:
     return [
-        {"label": _("Transaction ID"), "fieldname": "id", "fieldtype": "Int", "width": 180},
+        {"label": _("Transaction ID"), "fieldname": "id", "fieldtype": "Data", "width": 160},
         {"label": _("Status"), "fieldname": "status", "fieldtype": "Data", "width": 100},
-        {"label": _("Reference"), "fieldname": "reference", "fieldtype": "Data", "width": 200},
-        {"label": _("Amount"), "fieldname": "amount", "fieldtype": "Currency", "width": 120},
+        {"label": _("Reference"), "fieldname": "reference", "fieldtype": "Data", "width": 180},
+        {"label": _("Amount"), "fieldname": "amount", "fieldtype": "Currency", "options": "currency", "width": 120},
         {"label": _("Currency"), "fieldname": "currency", "fieldtype": "Data", "width": 80},
-        {"label": _("Customer"), "fieldname": "customer", "fieldtype": "Data", "width": 250},
         {"label": _("Email"), "fieldname": "email", "fieldtype": "Data", "width": 200},
-        {
-            "label": _("Doctype"),
-            "fieldname": "reference_doctype",
-            "fieldtype": "Data",
-            "width": 200,
-        },
-        {
-            "label": _("Docname"),
-            "fieldname": "reference_docname",
-            "fieldtype": "Dynamic Link",
-            "options": "reference_doctype",
-            "width": 200,
-        },
-        {
-            "label": _("Payment Log"),
-            "fieldname": "reference_log",
-            "fieldtype": "Link",
-            "options": "Paystack Payment Log",
-            "width": 200,
-        },
-        {"label": _("Channel"), "fieldname": "channel", "fieldtype": "Data", "width": 120},
-        {"label": _("Paid At"), "fieldname": "paid_at", "fieldtype": "Datetime", "width": 180},
-        {
-            "label": _("Created At"),
-            "fieldname": "created_at",
-            "fieldtype": "Datetime",
-            "width": 180,
-        },
-        {
-            "label": _("Gateway Response"),
-            "fieldname": "gateway_response",
-            "fieldtype": "Data",
-            "width": 200,
-        },
-        {"label": _("Domain"), "fieldname": "domain", "fieldtype": "Data", "width": 200},
-        {"label": _("IP"), "fieldname": "ip_address", "fieldtype": "Data", "width": 130},
+        {"label": _("Reference DocType"), "fieldname": "reference_doctype", "fieldtype": "Data", "width": 160},
+        {"label": _("Reference Name"), "fieldname": "reference_docname", "fieldtype": "Dynamic Link",
+         "options": "reference_doctype", "width": 180},
+        {"label": _("Payment"), "fieldname": "payment_session", "fieldtype": "Link", "options": PAYMENT_LOG, "width": 140},
+        {"label": _("Channel"), "fieldname": "channel", "fieldtype": "Data", "width": 100},
+        {"label": _("Paid At"), "fieldname": "paid_at", "fieldtype": "Datetime", "width": 170},
+        {"label": _("Created At"), "fieldname": "created_at", "fieldtype": "Datetime", "width": 170},
+        {"label": _("Gateway Response"), "fieldname": "gateway_response", "fieldtype": "Data", "width": 200},
+        {"label": _("Domain"), "fieldname": "domain", "fieldtype": "Data", "width": 80},
     ]
 
 
 def get_data(filters: dict) -> list:
-    # The caller is held to the company the named gateway collects for.
-    check_company_permission(gateway_company(filters.get("gateway")))
+    if not can_move_money() and not frappe.has_permission(PAYMENT_LOG, "read"):
+        frappe.throw(_("You are not permitted to view Paystack transactions."), frappe.PermissionError)
+    gateway = filters.get("gateway")
+    if not gateway or not frappe.db.exists(GATEWAY_SETTING, gateway):
+        frappe.throw(_("Select a Paystack account."))
 
-    url = "https://api.paystack.co/transaction"
-    headers = {"Authorization": f"Bearer {get_gateway_secret(filters.get('gateway'))}"}
     params = {}
-    if filters.get("per_page"):
-        params["perPage"] = filters["per_page"]
-    if filters.get("page"):
-        params["page"] = filters["page"]
-    if filters.get("customer"):
-        params["customer"] = filters["customer"]
-    if filters.get("terminalid"):
-        params["terminalid"] = filters["terminalid"]
-    if filters.get("status"):
-        params["status"] = filters["status"]
-    if filters.get("from_date"):
-        params["from"] = filters["from_date"]
-    if filters.get("to_date"):
-        params["to"] = filters["to_date"]
-    if filters.get("amount"):
-        params["amount"] = filters["amount"]
+    for key, param in (("per_page", "perPage"), ("page", "page"), ("customer", "customer"), ("status", "status"),
+                       ("from_date", "from"), ("to_date", "to"), ("amount", "amount")):
+        if filters.get(key):
+            params[param] = filters[key]
 
-    try:
-        res = requests.get(url, headers=headers, params=params, timeout=30)
-        res.raise_for_status()
-        response = res.json()
-    except Exception as e:
-        frappe.throw(_("Paystack API Error: {0}").format(str(e)))
-
+    rows = client_for(frappe.get_doc(GATEWAY_SETTING, gateway)).request("GET", "/transaction", params=params) or []
     data = []
-    if response.get("status"):
-        for tx in response.get("data", []):
-            tx["email"] = (tx.get("customer") or {}).get("email")
-            # Paystack returns "" for transactions created without metadata.
-            metadata = tx.get("metadata") or {}
-            if isinstance(metadata, dict):
-                metadata["reference_log"] = metadata.get("reference")
-                if metadata["reference_log"]:
-                    metadata.pop("reference", None)
-                tx.update(metadata)
-            # Nested payloads the grid has no column for.
-            for dl in ["log", "metadata", "authorization", "source"]:
-                tx.pop(dl, None)
-            tx["amount"] = flt(tx.get("amount")) / 100
-            data.append(tx)
-
+    for tx in rows:
+        metadata = tx.get("metadata") if isinstance(tx.get("metadata"), dict) else {}
+        currency = money.clean_currency(tx.get("currency"))
+        data.append(
+            {
+                "id": str(tx.get("id") or ""),
+                "status": tx.get("status"),
+                "reference": tx.get("reference"),
+                "amount": money.from_minor(tx.get("amount") or 0, currency),
+                "currency": currency,
+                "email": (tx.get("customer") or {}).get("email"),
+                "reference_doctype": metadata.get("reference_doctype"),
+                "reference_docname": metadata.get("reference_docname"),
+                "payment_session": metadata.get("session") or metadata.get("reference"),
+                "channel": tx.get("channel"),
+                "paid_at": (tx.get("paid_at") or tx.get("paidAt") or "").replace("T", " ").replace("Z", "")[:19] or None,
+                "created_at": (tx.get("created_at") or tx.get("createdAt") or "").replace("T", " ").replace("Z", "")[:19] or None,
+                "gateway_response": tx.get("gateway_response"),
+                "domain": tx.get("domain"),
+            }
+        )
     return data

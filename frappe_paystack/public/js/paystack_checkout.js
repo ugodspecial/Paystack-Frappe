@@ -1,262 +1,202 @@
 /**
  * Paystack checkout page.
  *
- * Reads its payload from a JSON script tag.
+ * The transaction is always initialised on the server (start_checkout): the
+ * browser never chooses the amount, the currency or the reference. Inline
+ * mode resumes that transaction in the Paystack popup; Hosted mode redirects
+ * to Paystack, which sends the payer back to this page. Either way the result
+ * is verified on the server (verify_checkout) before anything is trusted.
  */
 (function () {
 	"use strict";
 
 	const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+	const API = "frappe_paystack.api.";
+	const POLL_INTERVAL_MS = 6000;
+	const POLL_LIMIT = 30;
 
-	// Gateways set to this mode send the customer to a Paystack-hosted page.
-	const HOSTED_MODE = "Hosted";
-
-	const STATUS_TONES = {
-		Pending: "pending",
-		Processed: "success",
-		"Needs Attention": "success",
-		Completed: "success",
-		Failed: "danger",
-	};
-
-	// Every captured status reads as paid to the customer.
-	const STATUS_LABELS = {
-		Pending: __("Awaiting payment"),
-		Processed: __("Payment received"),
-		"Needs Attention": __("Payment received"),
-		Completed: __("Paid"),
-		Failed: __("Payment failed"),
-	};
-
-	function readPayload() {
-		const node = document.getElementById("paystack-checkout-data");
-		if (!node) {
-			return null;
-		}
-		try {
-			return JSON.parse(node.textContent);
-		} catch (error) {
-			console.error("Paystack: could not parse checkout payload", error);
-			return null;
-		}
-	}
-
-	function formatMoney(amount, currency) {
-		const value = Number(amount) || 0;
-		try {
-			return new Intl.NumberFormat(navigator.language || "en", {
-				style: "currency",
-				currency: currency,
-				currencyDisplay: "narrowSymbol",
-			}).format(value);
-		} catch (error) {
-			// Unknown/unsupported ISO code: fall back to a plain grouped number.
-			return `${currency || ""} ${new Intl.NumberFormat(
-				navigator.language || "en",
-				{ minimumFractionDigits: 2, maximumFractionDigits: 2 }
-			).format(value)}`.trim();
-		}
-	}
-
-	const payload = readPayload();
-	if (!payload) {
+	const node = document.getElementById("paystack-checkout-data");
+	if (!node) {
 		return;
 	}
 
-	Vue.createApp({
-		delimiters: ["[%", "%]"],
+	let data;
+	try {
+		data = JSON.parse(node.textContent);
+	} catch (error) {
+		console.error("Paystack: could not read the checkout payload", error);
+		return;
+	}
 
-		data() {
-			return {
-				doc: payload,
-				email: payload.email || "",
-				emailTouched: false,
-				busy: false,
-				feedback: { message: "", tone: "info" },
-				payLabel: __("Pay {0}", [
-					formatMoney(payload.payment_amount, payload.currency),
-				]),
-				busyLabel: __("Processing..."),
-			};
-		},
+	const button = document.getElementById("ps-pay");
+	const emailInput = document.getElementById("ps-email");
+	const feedback = document.getElementById("ps-feedback");
+	let busy = false;
+	let pollTimer = null;
+	let polls = 0;
+	const label = button ? button.textContent : "";
 
-		computed: {
-			formattedChargeAmount() {
-				return formatMoney(this.doc.payment_amount, this.doc.currency);
-			},
+	function say(message, tone) {
+		if (!feedback) {
+			return;
+		}
+		feedback.hidden = !message;
+		feedback.textContent = message || "";
+		feedback.className = `ps-alert ps-alert--${tone || "info"}`;
+	}
 
-			formattedOrderTotal() {
-				return formatMoney(this.doc.grand_total, this.doc.order_currency);
-			},
+	function setBusy(value, text) {
+		busy = value;
+		if (button) {
+			button.disabled = value;
+			button.textContent = value ? text || __("Processing...") : label;
+		}
+	}
 
-			showConverted() {
-				return this.doc.order_currency !== this.doc.currency;
-			},
+	function call(method, args) {
+		return new Promise((resolve, reject) => {
+			frappe.call({
+				method: API + method,
+				args: args,
+				type: "POST",
+				callback: (r) => resolve(r.message),
+				error: (r) => reject(r),
+			});
+		});
+	}
 
-			exchangeRate() {
-				return Number(this.doc.exchange_rate || 1).toFixed(4);
-			},
+	function payerEmail() {
+		if (!data.needs_email) {
+			return data.email || "";
+		}
+		return ((emailInput && emailInput.value) || "").trim();
+	}
 
-			statusTone() {
-				return STATUS_TONES[this.doc.status] || "pending";
-			},
+	function stopPolling() {
+		if (pollTimer) {
+			clearTimeout(pollTimer);
+			pollTimer = null;
+		}
+	}
 
-			statusLabel() {
-				return STATUS_LABELS[this.doc.status] || this.doc.status;
-			},
+	function handleResult(result) {
+		if (!result) {
+			return false;
+		}
+		if (result.redirect && ["Paid", "Partially Refunded", "Refunded"].includes(result.status)) {
+			stopPolling();
+			say(__("Payment received. Redirecting..."), "success");
+			window.location.href = result.redirect;
+			return true;
+		}
+		if (["Paid", "Partially Refunded", "Refunded"].includes(result.status)) {
+			stopPolling();
+			say(__("Payment received. Thank you."), "success");
+			window.location.reload();
+			return true;
+		}
+		if (result.status === "Failed") {
+			stopPolling();
+			setBusy(false);
+			say(__("The payment was not successful. You can try again."), "danger");
+			return true;
+		}
+		if (result.status === "Needs Attention") {
+			stopPolling();
+			say(__("We received your payment but need to review it. The merchant will contact you."), "warning");
+			return true;
+		}
+		return false;
+	}
 
-			canPay() {
-				return Boolean(this.doc.is_payable);
-			},
+	function verify(transactionReference) {
+		return call("verify_checkout", {
+			reference: data.reference,
+			transaction_reference: transactionReference || undefined,
+		}).then(handleResult);
+	}
 
-			needsEmail() {
-				return !payload.email;
-			},
-
-			isEmailValid() {
-				return EMAIL_PATTERN.test(this.email || "");
-			},
-
-			canSubmit() {
-				return !this.busy && this.isEmailValid;
-			},
-
-			closedReason() {
-				if (["Processed", "Needs Attention", "Completed"].includes(this.doc.status)) {
-					return __("This payment has already been completed. No further action is needed.");
+	function poll() {
+		stopPolling();
+		if (polls >= POLL_LIMIT) {
+			setBusy(false);
+			say(__("We have not heard back from Paystack yet. If you completed the payment, it will be confirmed shortly."), "info");
+			return;
+		}
+		pollTimer = setTimeout(() => {
+			polls += 1;
+			verify().then((done) => {
+				if (!done) {
+					poll();
 				}
-				if (this.doc.is_expired) {
-					return __("This payment link has expired. Please request a new one.");
-				}
-				if (this.doc.order_docstatus !== 1) {
-					return __("The related document is no longer active, so it cannot be paid.");
-				}
-				return __("This document has been settled and is no longer payable.");
-			},
-		},
+			}).catch(() => poll());
+		}, POLL_INTERVAL_MS);
+	}
 
-		methods: {
-			setFeedback(message, tone) {
-				this.feedback = { message: message, tone: tone || "info" };
+	function resume(checkout) {
+		if (typeof PaystackPop === "undefined") {
+			if (checkout.authorization_url) {
+				window.location.href = checkout.authorization_url;
+				return;
+			}
+			setBusy(false);
+			say(__("Paystack could not be loaded. Check your connection and try again."), "danger");
+			return;
+		}
+		const popup = new PaystackPop();
+		popup.resumeTransaction(checkout.access_code, {
+			onSuccess(transaction) {
+				verify((transaction && (transaction.reference || transaction.trxref)) || checkout.reference);
 			},
+			onCancel() {
+				stopPolling();
+				setBusy(false);
+				say(__("Payment cancelled. You can try again."), "warning");
+			},
+			onError(error) {
+				stopPolling();
+				setBusy(false);
+				say((error && error.message) || __("The payment could not be started. Please try again."), "danger");
+			},
+		});
+		// Fallback when the popup gives no callback: ask the server until Paystack answers.
+		polls = 0;
+		poll();
+	}
 
-			async startPayment() {
-				if (!this.canSubmit) {
-					this.emailTouched = true;
+	function start() {
+		if (busy) {
+			return;
+		}
+		const email = payerEmail();
+		if (!EMAIL_PATTERN.test(email)) {
+			say(__("Enter a valid email address."), "warning");
+			if (emailInput) {
+				emailInput.focus();
+			}
+			return;
+		}
+		say("", "info");
+		setBusy(true);
+		call("start_checkout", { reference: data.reference, email: email })
+			.then((checkout) => {
+				if (!checkout) {
+					throw new Error("empty");
+				}
+				if (checkout.mode === "Hosted" && checkout.authorization_url) {
+					setBusy(true, __("Redirecting to Paystack..."));
+					window.location.href = checkout.authorization_url;
 					return;
 				}
+				resume(checkout);
+			})
+			.catch(() => {
+				setBusy(false);
+				say(__("We could not start the payment. Please refresh the page and try again."), "danger");
+			});
+	}
 
-				this.busy = true;
-				this.setFeedback("", "info");
-
-				// Re-reads the link server-side.
-				const fresh = await this.fetchStatus();
-				if (!fresh) {
-					this.busy = false;
-					return;
-				}
-
-				this.doc = Object.assign({}, this.doc, fresh);
-				if (!this.doc.is_payable) {
-					this.busy = false;
-					this.setFeedback(this.closedReason, "warning");
-					return;
-				}
-
-				if (this.doc.checkout_mode === HOSTED_MODE) {
-					this.openHostedCheckout();
-					return;
-				}
-
-				this.openPaystack();
-			},
-
-			fetchStatus() {
-				return frappe
-					.call("frappe_paystack.api.validate_payment_link", {
-						docname: this.doc.reference,
-					})
-					.then((res) => res.message)
-					.catch(() => {
-						this.setFeedback(
-							__("We could not reach the server. Please try again."),
-							"danger"
-						);
-						return null;
-					});
-			},
-
-			openHostedCheckout() {
-				const self = this;
-
-				return frappe
-					.call("frappe_paystack.api.start_hosted_checkout", {
-						reference: this.doc.reference,
-						email: this.email,
-					})
-					.then((res) => {
-						if (!res.message) {
-							self.busy = false;
-							self.setFeedback(
-								__("We could not open the payment page. Please try again."),
-								"danger"
-							);
-							return;
-						}
-						window.location.href = res.message;
-					})
-					.catch(() => {
-						self.busy = false;
-						self.setFeedback(
-							__("We could not reach the server. Please try again."),
-							"danger"
-						);
-					});
-			},
-
-			openPaystack() {
-				const self = this;
-				const popup = new PaystackPop();
-
-				popup.newTransaction({
-					key: this.doc.public_key,
-					email: this.email,
-					// Paystack expects the amount in minor units.
-					amount: Math.round(Number(this.doc.payment_amount) * 100),
-					currency: this.doc.currency,
-					reference: this.doc.reference,
-					metadata: {
-						reference: this.doc.reference,
-						reference_doctype: this.doc.reference_doctype,
-						reference_docname: this.doc.reference_docname,
-						customer: this.doc.customer,
-						email: this.email,
-					},
-					onSuccess() {
-						self.busy = false;
-						self.doc = Object.assign({}, self.doc, {
-							status: "Processed",
-							is_payable: false,
-						});
-						self.setFeedback(
-							__("Payment received. Your receipt will arrive by email shortly."),
-							"success"
-						);
-					},
-					onCancel() {
-						self.busy = false;
-						self.setFeedback(__("Payment cancelled. You can try again."), "warning");
-					},
-					onError(error) {
-						self.busy = false;
-						self.setFeedback(
-							(error && error.message) ||
-								__("The payment could not be completed. Please try again."),
-							"danger"
-						);
-					},
-				});
-			},
-		},
-	}).mount("#paystack-checkout");
+	if (button) {
+		button.addEventListener("click", start);
+	}
 })();

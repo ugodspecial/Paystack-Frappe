@@ -11,7 +11,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint
 
-from frappe_paystack.utils import log_error_for, log_integration_request
+from frappe_paystack.core.logging import log_error_for, log_integration_request
 
 # Consecutive failed sweeps a row is allowed before it is escalated.
 SWEEP_ESCALATION = 6

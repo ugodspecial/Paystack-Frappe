@@ -1,13 +1,22 @@
 """
-Move the captures the retry window has closed on into Needs Attention.
+15.x: move captures the retry window closed on into Needs Attention.
 
-Runs post_model_sync. Each row is committed as it is moved.
+Kept for sites upgrading from before this patch; the 16.1 status migration
+then maps them to Paid with booking status Needs Attention.
 """
 
-from frappe_paystack.frappe_paystack.doctype.paystack_payment_log.paystack_payment_log import (
-    abandon_expired_settlements,
-)
+import frappe
+from frappe.utils import add_days, nowdate
+
+PAYMENT_LOG = "Paystack Payment Log"
 
 
 def execute() -> None:
-    abandon_expired_settlements()
+    if not all(frappe.db.has_column(PAYMENT_LOG, c) for c in ("payment_entry", "linked_doctype")):
+        return
+    frappe.db.sql(
+        """update `tabPaystack Payment Log` set status = 'Needs Attention'
+        where status = 'Processed' and coalesce(payment_entry, '') = '' and docstatus < 2
+        and linked_doctype != 'POS Invoice' and creation <= %s""",
+        (add_days(nowdate(), -7),),
+    )

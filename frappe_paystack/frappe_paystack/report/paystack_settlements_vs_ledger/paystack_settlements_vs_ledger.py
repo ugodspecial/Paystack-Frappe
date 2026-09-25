@@ -11,8 +11,15 @@ import frappe
 from frappe import _
 from frappe.utils import flt, fmt_money
 
-from frappe_paystack.utils import check_company_permission
-from frappe_paystack.utils.settlement import BALANCE_TOLERANCE, SETTLEMENT_DOCTYPE, settlement_gateway
+from frappe_paystack.core.constants import SETTLEMENT as SETTLEMENT_DOCTYPE
+from frappe_paystack.integrations.erpnext.accounts import check_company_permission, gateway_accounts, setting_for_company
+from frappe_paystack.integrations.erpnext.api import require_erpnext
+from frappe_paystack.integrations.erpnext.settlement import BALANCE_TOLERANCE
+
+
+def settlement_gateway(company: Optional[str]) -> Optional[Any]:
+    name = setting_for_company(company)
+    return gateway_accounts(name) if name else None
 
 PAYMENT_LOG = "Paystack Payment Log"
 JOURNAL_ENTRY = "Journal Entry"
@@ -175,7 +182,7 @@ def settlement_rows(filters: dict) -> list:
             "name as settlement",
             "company",
             "settlement_date",
-            "status",
+            "booking_status as status",
             "currency",
             "gross_amount",
             "total_fees",
@@ -319,5 +326,6 @@ def get_data(filters: dict) -> list:
 
 def execute(filters: Optional[dict] = None) -> tuple:
     filters = filters or {}
+    require_erpnext()
     check_company_permission(filters.get("company"))
     return get_columns(), get_data(filters)

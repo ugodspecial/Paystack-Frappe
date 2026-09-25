@@ -10,18 +10,14 @@ import frappe
 from frappe import _
 from frappe.utils import date_diff, flt, nowdate
 
-from frappe_paystack.utils import check_company_permission
+from frappe_paystack.core.constants import CAPTURED_STATUSES as CORE_CAPTURED
+from frappe_paystack.integrations.erpnext.accounts import check_company_permission
+from frappe_paystack.integrations.erpnext.api import require_erpnext
 
 PAYMENT_LOG = "Paystack Payment Log"
 
 # Log statuses that mean the money was captured and is therefore owed.
-CAPTURED_STATUSES = (
-    "Processed",
-    "Needs Attention",
-    "Completed",
-    "Partially Refunded",
-    "Refunded",
-)
+CAPTURED_STATUSES = CORE_CAPTURED
 
 
 def get_columns() -> list:
@@ -126,5 +122,6 @@ def get_data(filters: dict) -> list:
 
 def execute(filters: Optional[dict] = None) -> tuple:
     filters = filters or {}
+    require_erpnext()
     check_company_permission(filters.get("company"))
     return get_columns(), get_data(filters)

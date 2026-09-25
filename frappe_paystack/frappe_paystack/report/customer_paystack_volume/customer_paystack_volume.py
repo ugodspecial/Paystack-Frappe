@@ -3,11 +3,13 @@ from typing import Optional
 import frappe
 from frappe import _
 
-from frappe_paystack.utils import check_company_permission
+from frappe_paystack.integrations.erpnext.accounts import check_company_permission
+from frappe_paystack.integrations.erpnext.api import require_erpnext
 
 
 def execute(filters: Optional[dict] = None) -> tuple:
     filters = filters or {}
+    require_erpnext()
     check_company_permission(filters.get("company"))
 
     cols = [
@@ -52,7 +54,7 @@ def execute(filters: Optional[dict] = None) -> tuple:
         from `tabPaystack Payment Log` p
         left join `tabSales Invoice` si on si.name = p.linked_docname
         left join `tabSales Order` so on so.name = p.linked_docname
-        where p.status in ("Processed","Needs Attention","Completed")
+        where p.status in ("Paid","Partially Refunded","Refunded")
         and p.company=%(company)s
         {(" and " + " and ".join(conditions)) if conditions else ""}
         group by coalesce(si.customer, so.customer), p.company
