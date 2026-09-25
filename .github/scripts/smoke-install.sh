@@ -80,7 +80,8 @@ echo "--- desk"
 curl -s -c /tmp/smoke-cookies -o /dev/null -X POST "${BASE}/api/method/login" -d usr=Administrator -d pwd=admin
 expect GET "/api/method/frappe.desk.form.load.getdoctype?doctype=Paystack+Payment+Log" 200 "Verify with Paystack" -b /tmp/smoke-cookies
 expect GET "/api/method/frappe.desk.form.load.getdoctype?doctype=Paystack+Gateway+Setting" 200 "Test Connection" -b /tmp/smoke-cookies
-expect GET "/app/paystack-gateway-setting" 200 "" -b /tmp/smoke-cookies
+# Frappe version-16+ serves the desk at /desk and redirects /app there.
+expect GET "/app/paystack-gateway-setting" 200 "" -L -b /tmp/smoke-cookies
 TODAY="$(date +%F)"
 expect GET "/api/method/frappe.desk.query_report.run?report_name=Paystack+Activity&filters=%7B%22from_date%22%3A%22${TODAY}%22%2C%22to_date%22%3A%22${TODAY}%22%7D" 200 "Payment" -b /tmp/smoke-cookies
 

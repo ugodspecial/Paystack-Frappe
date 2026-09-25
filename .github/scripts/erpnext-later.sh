@@ -9,6 +9,9 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 cd "${BENCH_DIR}"
 
 bench get-app --skip-assets erpnext https://github.com/frappe/erpnext --branch "${BRANCH}"
+# The site has served requests and had apps removed and re-added; start ERPNext's
+# install from fresh caches, as after any `bench get-app`.
+bench --site "${SITE}" clear-cache
 bench --site "${SITE}" install-app erpnext
 bash "${SCRIPTS}/assert-apps.sh" "${BENCH_DIR}" "${SITE}" frappe payments frappe_paystack erpnext
 (cd sites && ../env/bin/python "${SCRIPTS}/check_adapter.py" "${SITE}" active)
