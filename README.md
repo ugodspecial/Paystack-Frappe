@@ -284,6 +284,9 @@ npm ci && npm test                                         # Vitest (checkout pa
 * `.github/workflows/ci.yml` runs on MariaDB:
   * core and LMS on Frappe version-15, version-16 and develop;
   * ERPNext + Webshop + Education on version-15 and version-16;
+  * a fresh install as a user would do it (assets built, only frappe_paystack installed,
+    the running site smoke-tested over HTTP, uninstall/reinstall), plus ERPNext installed
+    afterwards and removed again;
   * the 15.5.0 upgrade.
 
   It also runs static checks (including the ERPNext import boundary) and Vitest.
