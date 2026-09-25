@@ -246,15 +246,7 @@ jobs:
         working-directory: /home/runner/frappe-bench/sites
         run: ../env/bin/python "${GITHUB_WORKSPACE}/.github/scripts/upgrade_seed.py" test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
       - name: Switch the app to this commit and migrate
-        working-directory: /home/runner/frappe-bench
-        run: |
-          git -C "${GITHUB_WORKSPACE}" checkout -B ci-run
-          git -C apps/frappe_paystack fetch "${GITHUB_WORKSPACE}" ci-run
-          git -C apps/frappe_paystack checkout -f FETCH_HEAD
-          find apps/frappe_paystack -name '__pycache__' -type d -prune -exec rm -rf {} +
-          ./env/bin/pip install --quiet -e apps/frappe_paystack
-          set -o pipefail
-          bench --site test_site migrate 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
+        run: bash .github/scripts/switch-and-migrate.sh ~/frappe-bench test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
       - name: Verify statuses and preserved ERPNext data
         working-directory: /home/runner/frappe-bench/sites
         run: ../env/bin/python "${GITHUB_WORKSPACE}/.github/scripts/upgrade_verify.py" test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"

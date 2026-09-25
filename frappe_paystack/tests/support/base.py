@@ -222,6 +222,10 @@ def make_setting(name: str, secret: str, public: str, **values) -> Any:
     else:
         doc = frappe.new_doc(GATEWAY_SETTING)
         doc.gateway = name
+    if frappe.get_meta(GATEWAY_SETTING).has_field("company") and "company" not in values:
+        # With ERPNext, Link fields default to the user's default company; a core
+        # test account belongs to no company.
+        values["company"] = None
     doc.update({"enabled": 1, "test_mode": 1, "secret_key": secret, "public_key": public, "currency": "NGN",
                 "checkout_mode": "Inline", "payment_link_validity_hours": 0, "save_card_authorizations": 0,
                 "additional_currencies": "", "allowed_webhook_ips": "", "webhook_secret": None, **values})

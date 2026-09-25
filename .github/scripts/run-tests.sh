@@ -21,6 +21,8 @@ if grep -qE '^Ran 0 tests' "${LOG}"; then
 fi
 RESULT="$(grep -E '^(OK|FAILED)' "${LOG}" | tail -1 || true)"
 echo "${RESULT}"
+# Readable through the check-run annotations API, like the failure logs.
+echo "::notice title=frappe_paystack tests::$(grep -E '^Ran [0-9]+ test' "${LOG}" | tail -1) ${RESULT}"
 if [ -z "${RESULT}" ] || [[ "${RESULT}" == FAILED* ]]; then
   grep -E '^(FAIL|ERROR):' "${LOG}" || true
   echo "::error::Tests failed: ${RESULT:-no result line}"
