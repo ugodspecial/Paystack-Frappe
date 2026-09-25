@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [develop, main, version-15, version-16, "arena/**"]
+    branches: [develop, main, version-15, version-16]
   pull_request:
   workflow_dispatch:
 
