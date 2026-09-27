@@ -75,6 +75,20 @@ class TestCheckoutUrls(PaystackTestCase):
             link = site_url("/paystack-checkout/X")
             self.assertEqual(link, "https://erp.localhost:8443/paystack-checkout/X")
 
+    def test_a_live_site_keeps_https_and_its_default_port(self):
+        """A domain behind TLS: no port in the link, and never a downgrade to http."""
+        forwarded = {"X-Forwarded-Host": "pay.example.test", "X-Forwarded-Proto": "https"}
+        with browsing("http://frontend/app", forwarded):
+            self.assertEqual(
+                site_url("/paystack-checkout/X"), "https://pay.example.test/paystack-checkout/X"
+            )
+
+    def test_the_browser_scheme_wins_when_a_proxy_forgets_to_forward_it(self):
+        """TLS terminated upstream without X-Forwarded-Proto: the page knows it is https."""
+        with browsing("http://pay.example.test/api/method/frappe_paystack.api.start_checkout"):
+            remember_origin("https://pay.example.test")
+            self.assertEqual(site_url("/x"), "https://pay.example.test/x")
+
     def test_reported_origin_restores_a_port_the_proxy_dropped(self):
         # nginx forwards `Host $host`, so the port never reaches Frappe.
         with browsing("http://erp.localhost/api/method/frappe_paystack.api.start_checkout"):
