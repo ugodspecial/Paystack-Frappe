@@ -37,9 +37,14 @@ def browsing(url: str, headers: dict = None, host_name: str = None):
     """
     environ = EnvironBuilder(base_url=url, headers=list((headers or {}).items())).get_environ()
     previous_request = getattr(frappe.local, "request", None)
+    previous_ip = getattr(frappe.local, "request_ip", None)
     previous_host = frappe.local.conf.get("host_name", MISSING)
-    frappe.local.request = Request(environ)
     previous_alias = frappe.local.conf.get("hostname", MISSING)
+
+    frappe.local.request = Request(environ)
+    # Frappe fills this on a real request; the rate limiter on the guest
+    # endpoints refuses to run without it.
+    frappe.local.request_ip = "127.0.0.1"
     frappe.local.conf.pop("hostname", None)
     if host_name:
         frappe.local.conf["host_name"] = host_name
@@ -49,6 +54,7 @@ def browsing(url: str, headers: dict = None, host_name: str = None):
         yield
     finally:
         frappe.local.request = previous_request
+        frappe.local.request_ip = previous_ip
         for key, value in (("host_name", previous_host), ("hostname", previous_alias)):
             if value is MISSING:
                 frappe.local.conf.pop(key, None)
