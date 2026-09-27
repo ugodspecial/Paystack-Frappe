@@ -53,6 +53,8 @@ beforeEach(() => {
 		configurable: true,
 		writable: true,
 		value: {
+			// The port matters: a link built off the site name alone would drop it.
+			origin: "http://erp.localhost:8000",
 			set href(url) {
 				redirect = url;
 			},
@@ -87,17 +89,18 @@ describe("checkout page", () => {
 
 		expect(calls[0]).toEqual({
 			method: "frappe_paystack.api.start_checkout",
-			args: { reference: "S1", email: "payer@example.com" },
+			args: { reference: "S1", email: "payer@example.com", origin: "http://erp.localhost:8000" },
 			type: "POST",
 		});
-		// The browser never sends an amount, currency or reference of its own.
-		expect(Object.keys(calls[0].args)).toEqual(["reference", "email"]);
+		// The browser reports where it is, never an amount, currency or reference.
+		expect(Object.keys(calls[0].args)).toEqual(["reference", "email", "origin"]);
 		expect(popup.accessCode).toBe("ac_S1");
 
 		popup.callbacks.onSuccess({ reference: "S1" });
 		await flush();
 		expect(calls[1].method).toBe("frappe_paystack.api.verify_checkout");
 		expect(calls[1].args.transaction_reference).toBe("S1");
+		expect(calls[1].args.origin).toBe("http://erp.localhost:8000");
 		expect(redirect).toBe("/payment-success?x=1");
 	});
 
@@ -133,6 +136,25 @@ describe("checkout page", () => {
 		await flush();
 		expect(redirect).toBe("");
 		expect(document.getElementById("ps-feedback").textContent).toContain("not successful");
+	});
+
+	it("falls back to the hosted page when the popup cannot open", async () => {
+		globalThis.PaystackPop = function PaystackPop() {
+			return {
+				resumeTransaction: () => {
+					throw new Error("popup blocked");
+				},
+			};
+		};
+		replies["frappe_paystack.api.start_checkout"] = {
+			mode: "Inline",
+			access_code: "ac_S6",
+			authorization_url: "https://checkout.paystack.com/ac_S6",
+		};
+		mount({ reference: "S6", needs_email: false, email: "payer@example.com" });
+		click();
+		await flush();
+		expect(redirect).toBe("https://checkout.paystack.com/ac_S6");
 	});
 
 	it("falls back to the hosted page when the Paystack script is unavailable", async () => {

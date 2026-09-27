@@ -18,7 +18,7 @@ from typing import Any, Optional
 import frappe
 from frappe import _
 from frappe.integrations.utils import create_request_log
-from frappe.utils import add_to_date, cint, get_datetime, get_url, now_datetime
+from frappe.utils import add_to_date, cint, get_datetime, now_datetime
 
 from frappe_paystack.core import money
 from frappe_paystack.core.adapters import get_adapter
@@ -53,7 +53,17 @@ ATTEMPT_SUFFIX = re.compile(r"^(?P<session>.+?)-(?P<attempt>\d+)$")
 
 
 def checkout_url(session_name: str) -> str:
-    return get_url(f"/paystack-checkout/{session_name}")
+    """
+    The absolute checkout URL of a session.
+
+    Built through core.urls so that the link carries the host *and the port*
+    the browser asking for it is on: a site named `erp.localhost` served on
+    :8000 must not hand out `http://erp.localhost/...`, which refuses the
+    connection.
+    """
+    from frappe_paystack.core.urls import site_url
+
+    return site_url(f"/paystack-checkout/{session_name}")
 
 
 def _json_default(value: Any) -> str:

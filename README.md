@@ -69,6 +69,27 @@ URL to paste into the Paystack dashboard:
 https://your.site/api/method/frappe_paystack.api.paystack_webhook
 ```
 
+### Payment links on localhost, Docker and behind a proxy
+
+Payment links, the Paystack callback URL and the webhook URL are built from the
+address your browser is actually on, port included. A site called `erp.localhost`
+served by `bench start` hands out `http://erp.localhost:8000/paystack-checkout/...`,
+not `http://erp.localhost/...` - which would answer *"erp.localhost refused to
+connect"* (`ERR_CONNECTION_REFUSED`) and show a blank page instead of the checkout.
+Redirects after a payment are relative (`/payment-success?...`), so the payer never
+leaves the origin they are on.
+
+This works out of the box with `bench start`, with frappe_docker (whose nginx
+forwards `Host` without the port) and behind a reverse proxy that sets
+`X-Forwarded-Host` / `X-Forwarded-Proto` / `X-Forwarded-Port`. Only links built with
+no browser in the loop - emails sent by a background worker, the scheduler,
+`bench execute` - fall back to Frappe's own `get_url()`. If those come out wrong,
+pin the site's public address once:
+
+```bash
+bench --site erp.localhost set-config host_name http://erp.localhost:8080
+```
+
 ## Using Paystack from any app
 
 frappe_paystack implements the Payments gateway contract, so an app that works with

@@ -33,8 +33,9 @@ class PaystackGatewaySetting(Document):
 
     def onload(self) -> None:
         from frappe_paystack.core.accounts import gateways_for_setting
+        from frappe_paystack.core.urls import site_url
 
-        self.set_onload("webhook_url", frappe.utils.get_url("/api/method/frappe_paystack.api.paystack_webhook"))
+        self.set_onload("webhook_url", site_url("/api/method/frappe_paystack.api.paystack_webhook"))
         self.set_onload("payment_gateways", gateways_for_setting(self.name) if not self.is_new() else [])
 
     def validate(self) -> None:
@@ -177,11 +178,12 @@ class PaystackGatewaySetting(Document):
     def test_connection(self) -> dict:
         """Check the secret key against Paystack and report the webhook URL to configure."""
         from frappe_paystack.core.client import client_for
+        from frappe_paystack.core.urls import site_url
 
         self.check_permission("write")
         client_for(self, GATEWAY_SETTING, self.name).request("GET", "/transaction", params={"perPage": 1})
         return {
             "ok": True,
             "message": _("Paystack accepted the secret key."),
-            "webhook_url": frappe.utils.get_url("/api/method/frappe_paystack.api.paystack_webhook"),
+            "webhook_url": site_url("/api/method/frappe_paystack.api.paystack_webhook"),
         }

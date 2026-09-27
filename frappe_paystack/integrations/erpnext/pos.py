@@ -34,11 +34,19 @@ def render_email(invoice: Any, amount: float, url: str) -> str:
 
 
 @frappe.whitelist()
-def send_pos_payment_link(pos_invoice: str, email: str = "") -> dict:
-    """Email a checkout link for the Paystack tender of a (draft) POS Invoice."""
+def send_pos_payment_link(pos_invoice: str, email: str = "", origin: str = "") -> dict:
+    """
+    Email a checkout link for the Paystack tender of a (draft) POS Invoice.
+
+    `origin` is the till's own `window.location.origin`: the emailed link then
+    carries the address the shop reaches this site at, port included.
+    """
     from payments.utils import get_payment_gateway_controller
 
     from frappe_paystack.core.session import checkout_url, create_session
+    from frappe_paystack.core.urls import remember_origin
+
+    remember_origin(origin)
 
     invoice = frappe.get_doc("POS Invoice", pos_invoice)
     invoice.check_permission("read")

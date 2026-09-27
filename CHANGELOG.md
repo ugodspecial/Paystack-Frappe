@@ -29,6 +29,18 @@
   linkage, gateway-level reconciliation, scheduler sweeps.
 - Multiple Paystack accounts: "Paystack" stays the default gateway; accounts may register `Paystack-<name>`.
 
+### Checkout URLs
+- Payment links, the Paystack `callback_url` and the webhook URL are built from the address the browser
+  is on (`core.urls`), so the port survives: a site named `erp.localhost` served on :8000 no longer hands
+  out `http://erp.localhost/...` ("erp.localhost refused to connect", a blank page instead of the
+  checkout). The checkout page, the desk actions and the POS till report their own
+  `window.location.origin`; it is accepted only for this site's hosts, and a configured `host_name`
+  stays canonical for every other host.
+- Redirects after a payment are relative (`/payment-success?...`, `/payment-failed`), the way the gateways
+  shipped with Payments do it, so the payer keeps the origin - and the port - they came from.
+- The inline popup falls back to the hosted page of the same server-initialised transaction when it
+  cannot open.
+
 ### ERPNext adapter
 - All 15.x ERPNext features preserved; ERPNext-only settings are Custom Fields with the 15.x names.
 - Booking Status separate from payment status; Webshop's `set_as_paid()` is never repeated.

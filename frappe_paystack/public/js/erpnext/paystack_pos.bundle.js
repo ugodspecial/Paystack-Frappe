@@ -41,7 +41,12 @@ function send_payment_link(frm) {
 		return frappe
 			.call({
 				method: "frappe_paystack.utils.pos_payment.send_pos_payment_link",
-				args: { pos_invoice: frm.doc.name, email: frm.doc.contact_email },
+				args: {
+					pos_invoice: frm.doc.name,
+					email: frm.doc.contact_email,
+					// Keeps the emailed link on the address this till uses, port included.
+					origin: (window.location && window.location.origin) || "",
+				},
 			})
 			.then((response) => {
 				frappe.dom.unfreeze();

@@ -16,7 +16,7 @@ from typing import Any, Optional
 
 import frappe
 from frappe import _
-from frappe.utils import cint, get_url, getdate, now_datetime
+from frappe.utils import cint, getdate, now_datetime
 
 from frappe_paystack.core import money
 from frappe_paystack.core.adapters import get_adapter
@@ -96,6 +96,18 @@ def payability(session: Any) -> tuple:
 def start_checkout(session_name: str, email: Optional[str] = None) -> dict:
     """
     Open (or reuse) a Paystack transaction for a session and return what the browser needs.
+
+    One server-initialised transaction serves both checkout modes, the way the
+    upstream app splits them:
+
+    * Inline resumes it in the Paystack popup (`resumeTransaction(access_code)`)
+      and reports the result back through `verify_checkout`;
+    * Hosted sends the payer to `authorization_url`, and Paystack returns them
+      to `callback_url` - the checkout page of this session - with `?trxref=`.
+
+    `callback_url` is also what the popup falls back to for redirect-based
+    channels, so it is built from the origin the payer's browser is on (see
+    core.urls) and never from the bare site name.
 
     Returns {mode, reference, authorization_url, access_code, public_key}. Commits.
     """
@@ -209,24 +221,33 @@ def finish(session_name: str, outcome: str) -> dict:
 
 
 def result_url(session: Any, consumer_redirect: Optional[str] = None) -> Optional[str]:
-    """Return where the payer's browser goes next, following the Payments convention."""
+    """
+    Return where the payer's browser goes next, following the Payments convention.
+
+    Destinations on this site are returned as paths ("/payment-success?..."),
+    exactly like the gateways shipped with Payments. The browser then keeps the
+    origin it is already on, so a payer on http://erp.localhost:8000 is never
+    sent to http://erp.localhost, which would refuse the connection.
+    """
     from urllib.parse import urlencode
+
+    from frappe_paystack.core.urls import browser_path
 
     if session.status in CAPTURED_STATUSES:
         if consumer_redirect:
-            return consumer_redirect
+            return browser_path(consumer_redirect)
         params = {}
         if session.linked_doctype and session.linked_docname:
             params = {"doctype": session.linked_doctype, "docname": session.linked_docname}
         if session.redirect_to:
             params["redirect_to"] = session.redirect_to
         if not params.get("doctype"):
-            return session.redirect_to or None
-        return get_url("/payment-success?" + urlencode(params))
+            return browser_path(session.redirect_to) or None
+        return "/payment-success?" + urlencode(params)
 
     if session.status == FAILED:
         params = {"redirect_to": session.redirect_to} if session.redirect_to else {}
-        return get_url("/payment-failed" + ("?" + urlencode(params) if params else ""))
+        return "/payment-failed" + ("?" + urlencode(params) if params else "")
 
     return None
 

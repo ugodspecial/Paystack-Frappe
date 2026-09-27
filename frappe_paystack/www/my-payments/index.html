@@ -105,7 +105,12 @@ frappe.ready(function () {
 		button.prop("disabled", true);
 		frappe.call({
 			method: "frappe_paystack.api.create_payment_link",
-			args: { doctype: button.data("doctype"), docname: button.data("docname") },
+			args: {
+				doctype: button.data("doctype"),
+				docname: button.data("docname"),
+				// This page's own address, so the link keeps its host and port.
+				origin: window.location.origin,
+			},
 			callback: function (r) {
 				button.prop("disabled", false);
 				if (r.message) {
