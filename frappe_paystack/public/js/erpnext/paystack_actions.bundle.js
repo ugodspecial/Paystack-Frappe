@@ -11,6 +11,17 @@ frappe.provide("frappe_paystack.actions");
 	const BUTTON_GROUP = __("Paystack");
 	const DEFAULT_CURRENCY = "NGN";
 
+	/**
+	 * The address this desk is open at, port included.
+	 *
+	 * Payment links are built on the server, where the site name (erp.localhost)
+	 * and the Host a proxy forwards can both be missing the port. Sending the
+	 * origin along keeps the link on an address that actually answers.
+	 */
+	function origin() {
+		return (window.location && window.location.origin) || "";
+	}
+
 	function currencyOf(frm) {
 		return frm.doc.currency || DEFAULT_CURRENCY;
 	}
@@ -49,6 +60,7 @@ frappe.provide("frappe_paystack.actions");
 					docname: frm.doc.name,
 					amount: flt(amount),
 					currency: currencyOf(frm),
+					origin: origin(),
 				},
 				freeze: true,
 				freeze_message: __("Generating payment link..."),
@@ -76,7 +88,7 @@ frappe.provide("frappe_paystack.actions");
 		return frappe
 			.call({
 				method: "frappe_paystack.api.payment_link_qr",
-				args: { reference: referenceOf(url) },
+				args: { reference: referenceOf(url), origin: origin() },
 			})
 			.then((res) => {
 				if (!res.message) {

@@ -51,6 +51,28 @@ describe("payment link QR code", () => {
 		install_web_globals();
 	});
 
+	it("tells the server which address the desk is open at", async () => {
+		// The link is opened in the browser, so it must carry the port the desk
+		// is on: a site named erp.localhost is served on :8000, not on :80.
+		replies[CREATE_LINK] = CHECKOUT_URL;
+		replies[QR] = "data:image/svg+xml;base64,AAA";
+		const frm = await setup();
+
+		frm.buttons["Pay now"]();
+		await flush();
+
+		const call = globalThis.frappe.call.mock.calls
+			.map(([options]) => options)
+			.find((options) => options && options.method === CREATE_LINK);
+		expect(call.args).toEqual({
+			doctype: "Sales Invoice",
+			docname: "ACC-SINV-0001",
+			amount: 5000,
+			currency: "NGN",
+			origin: "http://erp.localhost:8000",
+		});
+	});
+
 	it("asks for the QR of the link it just raised", async () => {
 		replies[CREATE_LINK] = CHECKOUT_URL;
 		replies[QR] = "data:image/svg+xml;base64,AAA";
@@ -62,7 +84,7 @@ describe("payment link QR code", () => {
 		const call = globalThis.frappe.call.mock.calls
 			.map(([options]) => options)
 			.find((options) => options && options.method === QR);
-		expect(call.args).toEqual({ reference: "PSLOG-9" });
+		expect(call.args).toEqual({ reference: "PSLOG-9", origin: "http://erp.localhost:8000" });
 	});
 
 	it("renders the code inside the link dialog", async () => {

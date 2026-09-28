@@ -135,6 +135,7 @@ describe("raising a payment link", () => {
 			docname: "ACC-SINV-0001",
 			amount: 5000,
 			currency: "NGN",
+			origin: "http://erp.localhost:8000",
 		});
 	});
 

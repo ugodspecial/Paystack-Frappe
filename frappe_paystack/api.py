@@ -17,6 +17,7 @@ from frappe.rate_limiter import rate_limit
 
 from frappe_paystack.core import webhook as core_webhook
 from frappe_paystack.core.constants import PAYMENT_LOG
+from frappe_paystack.core.urls import remember_origin
 
 WEBHOOK_IP_LIMIT = 100
 WEBHOOK_RATE_WINDOW = 60
@@ -65,20 +66,31 @@ def _session_or_404(reference: str) -> str:
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep - guest by design; rate limited, POST only
 @rate_limit(limit=CHECKOUT_LIMIT, seconds=CHECKOUT_WINDOW)
-def start_checkout(reference: str, email: Optional[str] = None) -> dict:
-    """Open (or reuse) the Paystack transaction behind a checkout link."""
+def start_checkout(reference: str, email: Optional[str] = None, origin: Optional[str] = None) -> dict:
+    """
+    Open (or reuse) the Paystack transaction behind a checkout link.
+
+    `origin` is the checkout page's own `window.location.origin`. It is used -
+    after being checked against this site's hosts - for the Paystack
+    `callback_url`, so the payer is returned to the address (and the port) they
+    are actually browsing.
+    """
     from frappe_paystack.core.lifecycle import start_checkout as start
 
+    remember_origin(origin)
     return start(_session_or_404(reference), email=email)
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep - guest by design; rate limited, POST only
 @rate_limit(limit=CHECKOUT_LIMIT, seconds=CHECKOUT_WINDOW)
-def verify_checkout(reference: str, transaction_reference: Optional[str] = None) -> dict:
+def verify_checkout(
+    reference: str, transaction_reference: Optional[str] = None, origin: Optional[str] = None
+) -> dict:
     """Verify a checkout with Paystack after the popup or redirect returns; returns status and redirect."""
     from frappe_paystack.core.constants import VIA_CALLBACK
     from frappe_paystack.core.lifecycle import verify
 
+    remember_origin(origin)
     return verify(_session_or_404(reference), reference=transaction_reference, via=VIA_CALLBACK)
 
 
@@ -92,11 +104,12 @@ def get_payment_status(reference: str) -> dict:
 
 
 @frappe.whitelist()
-def payment_link_qr(reference: str) -> str:
+def payment_link_qr(reference: str, origin: Optional[str] = None) -> str:
     """A QR code (SVG data URI) for a checkout link, for users who can read the payment."""
     from frappe_paystack.core.qr import qr_data_uri
     from frappe_paystack.core.session import checkout_url
 
+    remember_origin(origin)
     doc = frappe.get_doc(PAYMENT_LOG, _session_or_404(reference))
     if not frappe.has_permission(PAYMENT_LOG, "read", doc=doc):
         if not (doc.linked_doctype and frappe.has_permission(doc.linked_doctype, "read", doc=doc.linked_docname)):
@@ -130,18 +143,31 @@ def validate_payment_link(docname: str) -> dict:
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep - guest by design; rate limited, POST only
 @rate_limit(limit=CHECKOUT_LIMIT, seconds=CHECKOUT_WINDOW)
-def start_hosted_checkout(reference: str, email: Optional[str] = None) -> str:
+def start_hosted_checkout(reference: str, email: Optional[str] = None, origin: Optional[str] = None) -> str:
     """Deprecated: use start_checkout. Returns the Paystack-hosted checkout URL."""
     from frappe_paystack.core.lifecycle import start_checkout as start
 
+    remember_origin(origin)
     return start(_session_or_404(reference), email=email).get("authorization_url")
 
 
 @frappe.whitelist()
-def create_payment_link(doctype: str, docname: str, amount: Any = None, currency: Optional[str] = None) -> str:
-    """ERPNext: a checkout URL for a Sales Invoice, Sales Order, Dunning or POS Invoice."""
+def create_payment_link(
+    doctype: str,
+    docname: str,
+    amount: Any = None,
+    currency: Optional[str] = None,
+    origin: Optional[str] = None,
+) -> str:
+    """
+    ERPNext: a checkout URL for a Sales Invoice, Sales Order, Dunning or POS Invoice.
+
+    `origin` (the desk's `window.location.origin`) keeps the link on the address
+    the user is working from, port included.
+    """
     from frappe_paystack.integrations.erpnext.api import create_payment_link as create
 
+    remember_origin(origin)
     return create(doctype, docname, amount, currency)
 
 

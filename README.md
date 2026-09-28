@@ -69,6 +69,41 @@ URL to paste into the Paystack dashboard:
 https://your.site/api/method/frappe_paystack.api.paystack_webhook
 ```
 
+### Where payment links point (localhost, Docker, a live domain)
+
+Nothing about the address is configured in this app. Payment links, the Paystack
+callback URL and the webhook URL are built from the address the browser is
+actually on - scheme, host **and port**:
+
+| You are on | Links are built as |
+|---|---|
+| `bench start` on a dev site | `http://<site>:8000/paystack-checkout/...` |
+| frappe_docker / nginx on another port | `http://<site>:8080/...` (the port nginx drops from `Host`) |
+| a live domain behind TLS | `https://<your-domain>/...` |
+| a proxy that sets `X-Forwarded-Host/-Proto/-Port` | whatever those say |
+
+That is what fixes *"`<site>` refused to connect"* (`ERR_CONNECTION_REFUSED`, a blank
+page instead of the checkout): a site served on port 8000 must not hand out a link on
+port 80. Redirects after a payment are relative (`/payment-success?...`), so the payer
+keeps the origin - and the scheme - they came in on, and an https site never drops to
+http.
+
+A reported origin is used only when its host is one of the site's own hosts, so a
+forged `Host` or `origin` header cannot aim a payment link somewhere else.
+
+The only links built with no browser in the loop - emails sent by a background worker,
+the scheduler, `bench execute` - fall back to Frappe's `get_url()`. If those come out
+wrong, pin the site's public address once, exactly as you would for any other Frappe
+app (include the port only if the public URL has one):
+
+```bash
+bench --site $SITE set-config host_name https://pay.example.com     # live
+bench --site $SITE set-config host_name http://erp.localhost:8080   # docker on :8080
+```
+
+A pinned `host_name` stays the canonical address for everyone; a browser on that same
+host may still correct a missing port.
+
 ## Using Paystack from any app
 
 frappe_paystack implements the Payments gateway contract, so an app that works with

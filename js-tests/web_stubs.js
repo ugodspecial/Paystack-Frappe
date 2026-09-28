@@ -146,6 +146,8 @@ export function install_web_globals() {
 		configurable: true,
 		writable: true,
 		value: {
+			// A dev site is served on a port; links built server-side must keep it.
+			origin: "http://erp.localhost:8000",
 			set href(url) {
 				recorded.redirect = url;
 			},

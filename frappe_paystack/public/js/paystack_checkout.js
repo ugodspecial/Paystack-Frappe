@@ -6,6 +6,11 @@
  * mode resumes that transaction in the Paystack popup; Hosted mode redirects
  * to Paystack, which sends the payer back to this page. Either way the result
  * is verified on the server (verify_checkout) before anything is trusted.
+ *
+ * Every call reports this page's own origin, so the server builds the Paystack
+ * callback URL - and every redirect it hands back - for the address the payer
+ * is actually on. Without it a site named erp.localhost served on :8000 sends
+ * the payer to http://erp.localhost, which refuses the connection.
  */
 (function () {
 	"use strict";
@@ -14,6 +19,9 @@
 	const API = "frappe_paystack.api.";
 	const POLL_INTERVAL_MS = 6000;
 	const POLL_LIMIT = 30;
+
+	// The address this page was served from: scheme, host and port.
+	const ORIGIN = (window.location && window.location.origin) || "";
 
 	const node = document.getElementById("paystack-checkout-data");
 	if (!node) {
@@ -113,6 +121,7 @@
 		return call("verify_checkout", {
 			reference: data.reference,
 			transaction_reference: transactionReference || undefined,
+			origin: ORIGIN,
 		}).then(handleResult);
 	}
 
@@ -133,32 +142,52 @@
 		}, POLL_INTERVAL_MS);
 	}
 
-	function resume(checkout) {
-		if (typeof PaystackPop === "undefined") {
-			if (checkout.authorization_url) {
-				window.location.href = checkout.authorization_url;
-				return;
-			}
+	function hosted(checkout, message) {
+		// Paystack's own page, reached with the transaction already opened on
+		// the server: the payer comes back to this page through callback_url.
+		if (!checkout.authorization_url) {
 			setBusy(false);
-			say(__("Paystack could not be loaded. Check your connection and try again."), "danger");
+			say(message || __("Paystack could not be loaded. Check your connection and try again."), "danger");
+			return false;
+		}
+		setBusy(true, __("Redirecting to Paystack..."));
+		window.location.href = checkout.authorization_url;
+		return true;
+	}
+
+	function resume(checkout) {
+		if (typeof PaystackPop === "undefined" || !checkout.access_code) {
+			hosted(checkout);
 			return;
 		}
-		const popup = new PaystackPop();
-		popup.resumeTransaction(checkout.access_code, {
-			onSuccess(transaction) {
-				verify((transaction && (transaction.reference || transaction.trxref)) || checkout.reference);
-			},
-			onCancel() {
-				stopPolling();
-				setBusy(false);
-				say(__("Payment cancelled. You can try again."), "warning");
-			},
-			onError(error) {
-				stopPolling();
-				setBusy(false);
-				say((error && error.message) || __("The payment could not be started. Please try again."), "danger");
-			},
-		});
+		let popup;
+		try {
+			popup = new PaystackPop();
+		} catch (error) {
+			hosted(checkout);
+			return;
+		}
+		try {
+			popup.resumeTransaction(checkout.access_code, {
+				onSuccess(transaction) {
+					verify((transaction && (transaction.reference || transaction.trxref)) || checkout.reference);
+				},
+				onCancel() {
+					stopPolling();
+					setBusy(false);
+					say(__("Payment cancelled. You can try again."), "warning");
+				},
+				onError(error) {
+					stopPolling();
+					setBusy(false);
+					say((error && error.message) || __("The payment could not be started. Please try again."), "danger");
+				},
+			});
+		} catch (error) {
+			// The popup could not open: the same transaction is payable on Paystack's page.
+			hosted(checkout, (error && error.message) || undefined);
+			return;
+		}
 		// Fallback when the popup gives no callback: ask the server until Paystack answers.
 		polls = 0;
 		poll();
@@ -178,14 +207,13 @@
 		}
 		say("", "info");
 		setBusy(true);
-		call("start_checkout", { reference: data.reference, email: email })
+		call("start_checkout", { reference: data.reference, email: email, origin: ORIGIN })
 			.then((checkout) => {
 				if (!checkout) {
 					throw new Error("empty");
 				}
-				if (checkout.mode === "Hosted" && checkout.authorization_url) {
-					setBusy(true, __("Redirecting to Paystack..."));
-					window.location.href = checkout.authorization_url;
+				if (checkout.mode === "Hosted") {
+					hosted(checkout);
 					return;
 				}
 				resume(checkout);

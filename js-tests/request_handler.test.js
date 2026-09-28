@@ -45,7 +45,12 @@ describe("send_payment_link", () => {
 		expect(frm.save).toHaveBeenCalled();
 		expect(frappe.call).toHaveBeenCalledWith({
 			method: "frappe_paystack.utils.pos_payment.send_pos_payment_link",
-			args: { pos_invoice: "POS-INV-0001", email: "buyer@example.com" },
+			args: {
+				pos_invoice: "POS-INV-0001",
+				email: "buyer@example.com",
+				// The till's own address, so the emailed link keeps host and port.
+				origin: window.location.origin,
+			},
 		});
 	});
 
