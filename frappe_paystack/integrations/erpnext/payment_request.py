@@ -56,6 +56,24 @@ def open_payment_request(doc: Any, amount: float) -> Optional[str]:
     )
 
 
+def apply_gateway_account(request: Any, account: Optional[str]) -> None:
+    """Put the Paystack gateway on a Payment Request that came back without it."""
+    if not account:
+        return
+    values = frappe.db.get_value(
+        "Payment Gateway Account",
+        account,
+        ["name", "payment_gateway", "payment_account"],
+        as_dict=True,
+    )
+    if not (values and values.payment_gateway):
+        return
+    request.payment_gateway_account = values.name
+    request.payment_gateway = values.payment_gateway
+    if values.payment_account and request.meta.has_field("payment_account"):
+        request.payment_account = values.payment_account
+
+
 def build_payment_request(doc: Any, amount: float, email: Optional[str] = None) -> Any:
     """A submitted Paystack Payment Request billing `amount` on `doc`."""
     from erpnext.accounts.doctype.payment_request.payment_request import make_payment_request
@@ -74,6 +92,9 @@ def build_payment_request(doc: Any, amount: float, email: Optional[str] = None) 
         args["payment_gateway_account"] = account
 
     request = make_payment_request(**args)
+    if request.payment_gateway != PAYMENT_GATEWAY:
+        # A draft Payment Request for this document is returned untouched.
+        apply_gateway_account(request, account)
     if not request.payment_gateway:
         frappe.throw(
             _("No Payment Gateway Account is set up for {0}. Save the Paystack Gateway Setting to create one.").format(
