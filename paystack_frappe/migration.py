@@ -119,7 +119,11 @@ def rename_module_def() -> Optional[str]:
             )
         return None
 
-    frappe.rename_doc(
+    # frappe.rename_doc (the whitelisted wrapper in frappe/__init__.py) takes no
+    # ignore_permissions; the model-level function it delegates to does.
+    from frappe.model.rename_doc import rename_doc as rename_document
+
+    rename_document(
         MODULE_DEF,
         FORMER_MODULE_NAME,
         MODULE_NAME,

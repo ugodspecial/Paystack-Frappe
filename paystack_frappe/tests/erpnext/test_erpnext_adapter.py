@@ -108,7 +108,7 @@ class TestPayments(ERPNextTestCase):
         self.assertEqual(flt(frappe.db.get_value("Sales Invoice", invoice.name, "outstanding_amount")), 0)
 
     def test_payment_link_through_a_payment_request(self):
-        from paystack_frappe.api import create_payment_link
+        from paystack_frappe.integrations.erpnext.api import create_payment_link
 
         invoice = self.invoice()
         url = create_payment_link("Sales Invoice", invoice.name)
@@ -128,7 +128,7 @@ class TestPayments(ERPNextTestCase):
     @requires("webshop")
     def test_webshop_override_does_not_book_twice(self):
         """Webshop's on_payment_authorized calls set_as_paid() itself; the adapter must not repeat it."""
-        from paystack_frappe.api import create_payment_link
+        from paystack_frappe.integrations.erpnext.api import create_payment_link
 
         frappe.db.set_single_value("Webshop Settings", "enabled", 1)
         frappe.db.commit()
@@ -215,7 +215,7 @@ class TestRefundsAndSettlements(ERPNextTestCase):
 
 class TestCustomers(ERPNextTestCase):
     def test_saved_card_per_customer(self):
-        from paystack_frappe.api import charge_saved_card, saved_cards
+        from paystack_frappe.integrations.erpnext.api import charge_saved_card, saved_cards
 
         frappe.db.set_value("Paystack Gateway Setting", ERP_ACCOUNT, "save_card_authorizations", 1)
         frappe.db.commit()

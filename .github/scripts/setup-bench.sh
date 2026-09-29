@@ -28,12 +28,15 @@ for spec in ${EXTRA_APPS:-}; do
 done
 
 if [ -n "${PAYSTACK_SOURCE:-}" ]; then
-  # The upgrade CI installs the app under its former name; the rename patch moves the site.
-  bench get-app --skip-assets frappe_paystack "${PAYSTACK_SOURCE%@*}" --branch "${PAYSTACK_SOURCE#*@}"
+  # The upgrade CI installs the app under its former name; switch-and-migrate.sh
+  # then adopts the renamed app and the rename patch moves the site.
+  PAYSTACK_APP=frappe_paystack
+  bench get-app --skip-assets "${PAYSTACK_APP}" "${PAYSTACK_SOURCE%@*}" --branch "${PAYSTACK_SOURCE#*@}"
 else
   # actions/checkout leaves a detached HEAD; a branch names the commit under test.
+  PAYSTACK_APP=paystack_frappe
   git -C "${GITHUB_WORKSPACE}" checkout -B ci-run
-  bench get-app --skip-assets paystack_frappe "${GITHUB_WORKSPACE}" --branch ci-run
+  bench get-app --skip-assets "${PAYSTACK_APP}" "${GITHUB_WORKSPACE}" --branch ci-run
 fi
 
 bench new-site --db-root-password root --admin-password admin "${SITE}"
@@ -41,7 +44,7 @@ bench --site "${SITE}" install-app payments
 for spec in ${EXTRA_APPS:-}; do
   bench --site "${SITE}" install-app "${spec%@*}"
 done
-bench --site "${SITE}" install-app paystack_frappe
+bench --site "${SITE}" install-app "${PAYSTACK_APP}"
 bench --site "${SITE}" set-config allow_tests true
 bench --site "${SITE}" list-apps
 
