@@ -24,8 +24,8 @@ def expect(label, actual, expected):
 # --- the rename itself: the site runs the renamed app, nothing names the old one
 expect("installed apps", "paystack_frappe" in frappe.get_installed_apps(), True)
 expect("former app installed", "frappe_paystack" in frappe.get_installed_apps(), False)
-expect("module renamed", frappe.db.exists("Module Def", "Paystack Frappe"), True)
-expect("former module gone", frappe.db.exists("Module Def", "Frappe Paystack"), False)
+expect("module renamed", bool(frappe.db.exists("Module Def", "Paystack Frappe")), True)
+expect("former module gone", bool(frappe.db.exists("Module Def", "Frappe Paystack")), False)
 module = frappe.db.get_value("Module Def", "Paystack Frappe", ["module_name", "app_name"], as_dict=True)
 expect("module_name", module.module_name, "Paystack Frappe")
 expect("module app_name", module.app_name, "paystack_frappe")

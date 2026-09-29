@@ -118,14 +118,15 @@ class TestRename(PaystackTestCase):
         # "Paystack Frappe" already exists on this site: the former module merges into it.
         self.assertEqual(rename_module_def(), MODULE_NAME)
         self.assertFalse(frappe.db.exists(MODULE_DEF, FORMER_MODULE_NAME))
-        module = frappe.db.get_value(MODULE_DEF, MODULE_NAME, ["module_name", "app_name"], as_dict=True)
-        self.assertEqual((module.module_name, module.app_name), (MODULE_NAME, APP_NAME))
+        module = frappe.db.get_value(MODULE_DEF, MODULE_NAME, ["module_name", "app_name", "custom"], as_dict=True)
+        self.assertEqual((module.module_name, module.app_name, module.custom), (MODULE_NAME, APP_NAME, 0))
         # the linked row followed the module
         self.assertEqual(frappe.db.get_value(NUMBER_CARD, "Rename Fixture Card", "module"), MODULE_NAME)
 
         # a second pass finds nothing to move and only re-claims the module
         self.assertIsNone(rename_module_def())
         self.assertEqual(frappe.db.get_value(MODULE_DEF, MODULE_NAME, "app_name"), APP_NAME)
+        self.assertEqual(frappe.db.get_value(MODULE_DEF, MODULE_NAME, "custom"), 0)
 
     def _drop_module_fixture(self):
         frappe.db.delete(NUMBER_CARD, {"label": "Rename Fixture Card"})

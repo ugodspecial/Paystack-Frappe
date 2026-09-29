@@ -119,6 +119,13 @@ def rename_module_def() -> Optional[str]:
             )
         return None
 
+    # Frappe v16+ refuses to rename a standard module (Module Def's before_rename
+    # throws unless the row is custom): mark the old module custom for the
+    # duration of the rename, whatever the version. The row is normalised to a
+    # standard module of this app afterwards; on_trash's developer-mode file
+    # handling is skipped for a custom module, so merging stays safe too.
+    frappe.db.set_value(MODULE_DEF, FORMER_MODULE_NAME, "custom", 1, update_modified=False)
+
     # frappe.rename_doc (the whitelisted wrapper in frappe/__init__.py) takes no
     # ignore_permissions; the model-level function it delegates to does.
     from frappe.model.rename_doc import rename_doc as rename_document
@@ -135,7 +142,7 @@ def rename_module_def() -> Optional[str]:
     frappe.db.set_value(
         MODULE_DEF,
         MODULE_NAME,
-        {"app_name": APP_NAME, "module_name": MODULE_NAME},
+        {"app_name": APP_NAME, "module_name": MODULE_NAME, "custom": 0},
         update_modified=False,
     )
     frappe.clear_cache()
