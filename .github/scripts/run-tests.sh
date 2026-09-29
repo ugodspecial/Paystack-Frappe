@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the frappe_paystack suite and fail on any failed/erroring test.
+# Run the paystack_frappe suite and fail on any failed/erroring test.
 #
 # bench run-tests can exit 0 when tests fail, so the summaries decide the result.
 # Frappe version-16+ runs each test category (integration, unit, unspecified)
@@ -12,7 +12,7 @@ LOG="$(mktemp)"
 trap 'rm -f "${LOG}"' EXIT
 cd "${BENCH_DIR}"
 set +e
-bench --site "${SITE}" run-tests --app frappe_paystack 2>&1 | tee "${LOG}"
+bench --site "${SITE}" run-tests --app paystack_frappe 2>&1 | tee "${LOG}"
 set -e
 
 RAN_LINES="$(grep -E '^Ran [0-9]+ test' "${LOG}" || true)"
@@ -25,7 +25,7 @@ RESULTS="$(grep -E '^(OK|FAILED)' "${LOG}" || true)"
 SUMMARY="$(echo "${RESULTS}" | tr '\n' ' ')"
 echo "Categories: $(echo "${RAN_LINES}" | wc -l); tests: ${TOTAL}; results: ${SUMMARY}"
 # Readable through the check-run annotations API, like the failure logs.
-echo "::notice title=frappe_paystack tests::Ran ${TOTAL} tests in $(echo "${RAN_LINES}" | wc -l) categories: ${SUMMARY}"
+echo "::notice title=paystack_frappe tests::Ran ${TOTAL} tests in $(echo "${RAN_LINES}" | wc -l) categories: ${SUMMARY}"
 
 if [ "${TOTAL}" -eq 0 ]; then
   echo "::error::The suite collected 0 tests."

@@ -2,7 +2,8 @@
 Seed rows shaped like frappe_paystack 15.5.0 data, on a site running upstream 15.5.0.
 
 Rows are written with SQL so no ERPNext masters are needed: the point is to
-prove that the 16.1 migration keeps every value and maps every status.
+prove that the switch to the renamed app and its migrations keep every value
+and map every status.
 Usage (from sites/): ../env/bin/python upgrade_seed.py <site>
 """
 

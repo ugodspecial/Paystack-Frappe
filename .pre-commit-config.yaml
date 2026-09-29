@@ -1,4 +1,4 @@
-exclude: 'node_modules/|^\.git/|frappe_paystack/public/js/vue\.global\.js'
+exclude: 'node_modules/|^\.git/|paystack_frappe/public/js/vue\.global\.js'
 default_stages: [pre-commit]
 fail_fast: false
 
@@ -7,7 +7,7 @@ repos:
     rev: v4.6.0
     hooks:
       - id: trailing-whitespace
-        files: "frappe_paystack.*"
+        files: "paystack_frappe.*"
         exclude: ".*json$|.*txt$|.*csv|.*md|.*svg"
       - id: check-merge-conflict
       - id: check-ast
@@ -54,7 +54,7 @@ repos:
     hooks:
       - id: mypy
         files: '\.py$'
-        exclude: '^frappe_paystack/www/paystack-checkout/|^frappe_paystack/tests/'
+        exclude: '^paystack_frappe/www/paystack-checkout/|^paystack_frappe/tests/'
         args: ['--config-file=pyproject.toml']
 
 ci:

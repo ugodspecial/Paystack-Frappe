@@ -9,7 +9,7 @@ import {
 	replies,
 } from "./web_stubs.js";
 
-const MARK_MANUAL_OVERRIDE = "frappe_paystack.utils.reconciliation_api.mark_manual_override";
+const MARK_MANUAL_OVERRIDE = "paystack_frappe.core.reconciliation_api.mark_manual_override";
 
 /** Refresh a Reconciliation Log and return the form it ran against. */
 function refresh(doc) {

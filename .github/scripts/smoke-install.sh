@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke-test a site where frappe_paystack was installed from scratch, with assets built:
+# Smoke-test a site where paystack_frappe was installed from scratch, with assets built:
 # the app set, built assets, the checkout page of a real payment, webhook
 # signature enforcement, desk metadata, a report, and uninstall/reinstall.
 #   smoke-install.sh <bench-dir> <site>
@@ -23,7 +23,7 @@ expect() {  # expect <method> <path> <status> [text the body must contain] [extr
 }
 
 echo "--- installed apps (payments came in through required_apps)"
-bash "${SCRIPTS}/assert-apps.sh" "${BENCH_DIR}" "${SITE}" frappe payments frappe_paystack
+bash "${SCRIPTS}/assert-apps.sh" "${BENCH_DIR}" "${SITE}" frappe payments paystack_frappe
 
 echo "--- built assets"
 python3 - "${BENCH_DIR}" <<'EOF'
@@ -56,24 +56,24 @@ for _ in $(seq 1 60); do
 done
 
 expect GET "/api/method/ping" 200 "pong"
-expect GET "/assets/frappe_paystack/js/paystack_checkout.js" 200 "resumeTransaction"
-expect GET "/assets/frappe_paystack/css/paystack_checkout.css" 200 "ps-checkout"
+expect GET "/assets/paystack_frappe/js/paystack_checkout.js" 200 "resumeTransaction"
+expect GET "/assets/paystack_frappe/css/paystack_checkout.css" 200 "ps-checkout"
 ACTIONS="$(python3 -c "import json;print(json.load(open('sites/assets/assets.json'))['paystack_actions.bundle.js'])")"
-expect GET "${ACTIONS}" 200 "frappe_paystack.actions"
+expect GET "${ACTIONS}" 200 "paystack_frappe.actions"
 
 echo "--- the payment's checkout page"
 expect GET "/paystack-checkout/${SESSION}" 200 "js.paystack.co/v2/inline.js"
 grep -q "paystack_checkout.js" /tmp/smoke-body || fail "checkout page does not load paystack_checkout.js"
 grep -q "ps-pay" /tmp/smoke-body || fail "checkout page has no Pay button"
 expect GET "/paystack-checkout/does-not-exist" 200 "Payment link not found"
-expect GET "/api/method/frappe_paystack.api.get_payment_status?reference=${SESSION}" 200 "is_payable"
+expect GET "/api/method/paystack_frappe.api.get_payment_status?reference=${SESSION}" 200 "is_payable"
 
 echo "--- webhook signature enforcement"
 BODY='{"event":"transfer.success","data":{"id":1}}'
-expect POST "/api/method/frappe_paystack.api.paystack_webhook" 403 "" \
+expect POST "/api/method/paystack_frappe.api.paystack_webhook" 403 "" \
   -H "Content-Type: application/json" -H "x-paystack-signature: forged" --data "${BODY}"
 SIGNATURE="$(python3 -c "import hmac,hashlib,sys;print(hmac.new(sys.argv[1].encode(),sys.argv[2].encode(),hashlib.sha512).hexdigest())" "${SECRET}" "${BODY}")"
-expect POST "/api/method/frappe_paystack.api.paystack_webhook" 200 "" \
+expect POST "/api/method/paystack_frappe.api.paystack_webhook" 200 "" \
   -H "Content-Type: application/json" -H "x-paystack-signature: ${SIGNATURE}" --data "${BODY}"
 
 echo "--- desk"
@@ -89,8 +89,8 @@ kill "${SERVER}" 2>/dev/null || true
 trap - EXIT
 
 echo "--- uninstall and reinstall"
-bench --site "${SITE}" uninstall-app frappe_paystack --yes --no-backup
+bench --site "${SITE}" uninstall-app paystack_frappe --yes --no-backup
 bash "${SCRIPTS}/assert-apps.sh" "${BENCH_DIR}" "${SITE}" frappe payments
-bench --site "${SITE}" install-app frappe_paystack
-bash "${SCRIPTS}/assert-apps.sh" "${BENCH_DIR}" "${SITE}" frappe payments frappe_paystack
+bench --site "${SITE}" install-app paystack_frappe
+bash "${SCRIPTS}/assert-apps.sh" "${BENCH_DIR}" "${SITE}" frappe payments paystack_frappe
 echo "smoke test passed"

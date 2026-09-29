@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Install frappe_paystack the way a user does on a new site: assets are built,
-# and only frappe_paystack is installed explicitly (Frappe installs Payments
+# Install paystack_frappe the way a user does on a new site: assets are built,
+# and only paystack_frappe is installed explicitly (Frappe installs Payments
 # because hooks.required_apps names it).
 #
 # Environment: FRAPPE_BRANCH, PAYMENTS_BRANCH, PYTHON_BIN
@@ -17,8 +17,8 @@ mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_ser
 cd "${BENCH_DIR}"
 bench get-app payments https://github.com/frappe/payments --branch "${PAYMENTS_BRANCH}"
 git -C "${GITHUB_WORKSPACE}" checkout -B ci-run
-bench get-app frappe_paystack "${GITHUB_WORKSPACE}" --branch ci-run
+bench get-app paystack_frappe "${GITHUB_WORKSPACE}" --branch ci-run
 
 bench new-site --db-root-password root --admin-password admin "${SITE}"
-bench --site "${SITE}" install-app frappe_paystack
+bench --site "${SITE}" install-app paystack_frappe
 bench --site "${SITE}" migrate

@@ -15,7 +15,7 @@
 | D1 | Upstream `version-15` (15.5.0) and `version-16` (16.0.0) imported with history, then refactored. |
 | D2 | "School" = Education. It requires ERPNext, so it is tested in the ERPNext CI environment. LMS is the no-ERPNext target. |
 | D3 | One codebase on this repository's develop line for Frappe version-15 and version-16. CI also runs Frappe develop. |
-| D4 | In-app adapter at `frappe_paystack/integrations/erpnext`, with a CI import-boundary check. |
+| D4 | In-app adapter at `paystack_frappe/integrations/erpnext`, with a CI import-boundary check. |
 | D5 | Callbacks run as the initiating user on every completion path: browser, webhook, sweep, and desk actions. Admin-login cases are handled: impersonation is recorded; an admin verifying from the desk is never the payer; an admin enrolling by hand is handled idempotently (LMS course) or flagged (LMS batch); System Managers can start a payment on behalf of a user; a payer's email never selects the user. |
 | D6 | "Paystack" stays the default gateway. Other accounts can register `Paystack-<name>`. |
 | D7 | Webhook Secret kept as an optional override. |
@@ -24,7 +24,7 @@
 
 Two deviations from §10–§12:
 - `linked_doctype`/`linked_docname` keep their names, now typed as Link and Dynamic Link, instead of being renamed. This keeps reports, print formats and customisations working.
-- ERPNext-only reports stay in module "Frappe Paystack" but are guarded, rather than moving to a "Paystack ERPNext" module. The Sales Invoice print format is created by the adapter.
+- ERPNext-only reports stay in module "Paystack Frappe" but are guarded, rather than moving to a "Paystack ERPNext" module. The Sales Invoice print format is created by the adapter.
 
 How to read this: §0 gives the summary and the decisions needed. §1 to §5 describe the current state. §6 to §13 are the proposal. §14 to §17 cover tests, file plan and risks. Appendix A is the dependency matrix and Appendix B the evidence.
 
@@ -37,7 +37,7 @@ How to read this: §0 gives the summary and the decisions needed. §1 to §5 des
 1. **Baseline mismatch (blocking question).** This repository is upstream `master` from 2022: v0.0.4, 42 files, ~1.1k lines, Frappe v13 era. None of the features the brief asks us to preserve exist in it: saved cards, refunds, POS, Dunning, subscriptions, settlement accounting, reconciliation, reports, customer portal, and the `pyproject.toml` with an ERPNext dependency. They exist only in upstream **`mymi14s/frappe_paystack` `version-15` / `version-16`**: v15.5.0, ~220 files, ~34k lines, ~1,413 test functions. The refactor must start from one of these lineages (Decision D1).
 2. **Upstream v15/v16 cannot be installed on a site without ERPNext**, for three independent reasons:
    - `hooks.required_apps = ["erpnext", "payments"]`. Frappe's `install_app` recursively installs every required app, or aborts with "App erpnext not in apps.txt".
-   - **33 of its 68 Python modules fail to import** with `ModuleNotFoundError: No module named 'erpnext'`. This was verified empirically (Appendix B). The failures include the **webhook endpoint** (`frappe_paystack.api`), the **gateway settings controller**, the Payment Log and Refund Log controllers, all 5 reports and 8 of 13 patches.
+   - **33 of its 68 Python modules fail to import** with `ModuleNotFoundError: No module named 'erpnext'`. This was verified empirically (Appendix B). The failures include the **webhook endpoint** (`paystack_frappe.api`), the **gateway settings controller**, the Payment Log and Refund Log controllers, all 5 reports and 8 of 13 patches.
    - `after_install` creates a `Mode of Payment`, a Property Setter on it and `Payment Gateway Account`s, all of which are ERPNext DocTypes.
 
    Forcing the app onto such a site would also break **every Jinja render and every website page**, because its `jinja.methods` and `update_website_context` hooks point into modules that import ERPNext (§1.5, O1).
@@ -72,7 +72,7 @@ How to read this: §0 gives the summary and the decisions needed. §1 to §5 des
 | D1 | **Baseline code** | A: keep the local 2022 code. B: import upstream `version-15` (and its `version-16` twin) into this repo and refactor it. C: greenfield. | **B.** Only B contains the features to preserve. A cannot run on Frappe ≥ v14. The plan in §15/§16 assumes B. |
 | D2 | **What "School" means** | Education (requires ERPNext). "Frappe School" (LMS). Something else. | Test Education only in ERPNext environments. LMS is the no-ERPNext education target. |
 | D3 | **Supported versions** | v15 only. v15 + v16. Also develop. | v15 and v16 branches, as upstream does (they differ only in pins/CI). develop on a best-effort basis. |
-| D4 | **Adapter packaging** | In-app `frappe_paystack/integrations/erpnext`. Separate `paystack_erpnext` app. | **In-app**, as the brief suggests, with a hard import boundary and a CI guard. A separate app remains a later option. |
+| D4 | **Adapter packaging** | In-app `paystack_frappe/integrations/erpnext`. Separate `paystack_erpnext` app. | **In-app**, as the brief suggests, with a hard import boundary and a CI guard. A separate app remains a later option. |
 | D5 | **User context for consumer callbacks triggered by webhook or sweep** | Session owner. Only user-driven paths. Administrator (upstream). | **Session owner.** It is required for LMS correctness (§6.7). ERPNext booking keeps elevated rights inside the adapter. |
 | D6 | **Payment Gateway naming with several Paystack accounts** | Single "Paystack" gateway with company routing (upstream). One Payment Gateway per account (Payments/Mpesa pattern). | **Both.** The default/legacy account keeps the name "Paystack" (existing Payment Gateway Accounts and Payment Requests keep working). Additional accounts become `Paystack-<name>`. |
 | D7 | **"Webhook Secret" field** | Keep. Remove. | **Keep as an optional override.** Paystack signs webhooks with the account's *secret key* and has no separate webhook secret. |
@@ -81,7 +81,7 @@ How to read this: §0 gives the summary and the decisions needed. §1 to §5 des
 
 ---
 
-## 1. frappe_paystack architecture analysis
+## 1. paystack_frappe architecture analysis
 
 ### 1.1 Two code lineages
 
@@ -96,7 +96,7 @@ How to read this: §0 gives the summary and the decisions needed. §1 to §5 des
 | Other DocTypes | `IP Address Table` | Refund Log, Reconciliation Log, Settlement, Customer Authorization |
 | Webhook security | None | HMAC-SHA512 with `compare_digest`, CIDR IP allowlist, global and per-IP rate limits |
 | Works without ERPNext | No (Payment Request-only flow), and not on Frappe ≥ v14 at all | No (§3) |
-| `version-15` vs `version-16` | n/a | Only `.github/workflows/ci.yml`, `frappe_paystack/__init__.py` and `pyproject.toml` differ |
+| `version-15` vs `version-16` | n/a | Only `.github/workflows/ci.yml`, `paystack_frappe/__init__.py` and `pyproject.toml` differ |
 
 ### 1.2 Local lineage (`d5982d7`): structure and defects
 
@@ -196,7 +196,7 @@ Without ERPNext, a paid log can never leave `Processed`, and a refund can never 
 
 | # | Observation | Lineage | Evidence |
 |---|---|---|---|
-| O1 | **Forcing the app onto a no-ERPNext site breaks the whole site.** `update_website_context` runs on every template page. `jinja.methods` is loaded by `get_jinja_hooks()`: the first `ModuleNotFoundError` is caught, but the `frappe.get_attr()` fallback re-raises it. Both hooks import `frappe_paystack.utils.*`, which imports ERPNext. | v15 | `frappe/website/page_renderers/base_template_page.py`, `frappe/utils/jinja.py` (v15) |
+| O1 | **Forcing the app onto a no-ERPNext site breaks the whole site.** `update_website_context` runs on every template page. `jinja.methods` is loaded by `get_jinja_hooks()`: the first `ModuleNotFoundError` is caught, but the `frappe.get_attr()` fallback re-raises it. Both hooks import `paystack_frappe.utils.*`, which imports ERPNext. | v15 | `frappe/website/page_renderers/base_template_page.py`, `frappe/utils/jinja.py` (v15) |
 | O2 | **Silent currency coercion.** `normalize_currency()` maps any unsupported code to `"NGN"`. `PaymentLog.validate()` applies it, and `get_payment_url` never calls `validate_transaction_currency` itself (ERPNext does, LMS and Web Forms do not). An INR or EUR request is recorded and charged as NGN with the same number. | v15 | `utils/utils.py:256`, payment log `validate()` |
 | O3 | **Only ERPNext documents can be paid.** `validate_record()` requires `docstatus == 1` and an ERPNext status (Unpaid, To Bill, Unresolved, …). `get_data()` reads `order.customer`, `conversion_rate` and `currency`. `LMS Course` and `Web Form` documents are rejected. | v15 | payment log `validate_record`, `get_data` |
 | O4 | **Inline mode lets the client set amount and currency** (`PaystackPop.newTransaction`). Outside the Payment Request path, the charge handler books `amount_paid` without comparing it to the expected amount. Server-side initialisation plus `resumeTransaction(access_code)` removes this class of issue. | v15, local | `public/js/paystack_checkout.js` |
@@ -291,7 +291,7 @@ Of 104 non-test source files, 62 reference ERPNext concepts. Categories:
 
 | Direct importer | ERPNext symbol |
 |---|---|
-| `utils/utils.py` | `erpnext.accounts.party.get_party_account` (and `utils/__init__.py` re-exports the module, so **any** `frappe_paystack.utils.*` import fails) |
+| `utils/utils.py` | `erpnext.accounts.party.get_party_account` (and `utils/__init__.py` re-exports the module, so **any** `paystack_frappe.utils.*` import fails) |
 | `utils/payment_request.py` | `erpnext...payment_request.make_payment_request` |
 | `utils/portal.py` | `erpnext...payment_request.get_amount` |
 | `doctype/paystack_payment_log/paystack_payment_log.py` | `erpnext...payment_entry.get_payment_entry` |
@@ -639,7 +639,7 @@ sequenceDiagram
 
 ## 8. Missing Payments abstractions (API gaps) and how we bridge them without ERPNext
 
-| # | Gap | Local bridge in frappe_paystack (core, no ERPNext) | Upstream proposal |
+| # | Gap | Local bridge in paystack_frappe (core, no ERPNext) | Upstream proposal |
 |---|---|---|---|
 | G1 | Payment session record and states | `Paystack Payment Log` as the session, Integration Request for attempts/audit | PSL (v2) |
 | G2 | Canonical transaction data and a guest-safe schema | Normalise and whitelist kwargs in core; store the original kwargs verbatim for the consumer | `TxData` (v2) |
@@ -668,11 +668,11 @@ flowchart LR
       LMS[LMS] --- WF[Web Forms / any app] --- EDU[Education] --- ERP[ERPNext Payment Request / Webshop]
     end
     Consumers -->|get_payment_gateway_controller + get_payment_url| PAY[Frappe Payments]
-    PAY -->|Payment Gateway → controller doc| CORE[frappe_paystack core]
+    PAY -->|Payment Gateway → controller doc| CORE[paystack_frappe core]
     CORE -->|HTTPS| PSAPI[Paystack API]
     PSAPI -->|webhooks| CORE
     CORE -.->|run_method on_payment_authorized / on_payment_failed<br/>doc_events, paystack_* hooks| Consumers
-    ADP[frappe_paystack.integrations.erpnext] -.->|registered via hooks<br/>imports erpnext lazily| CORE
+    ADP[paystack_frappe.integrations.erpnext] -.->|registered via hooks<br/>imports erpnext lazily| CORE
     ADP --> ERPNEXT[ERPNext]
     ERP -->|duck-typed controller calls: get_payment_url,<br/>request_for_payment, on_payment_request_submission| CORE
     CORE -->|payment_gateway_enabled hook| ERPNEXT
@@ -682,14 +682,14 @@ flowchart LR
 
 | Rule | Statement | Enforced by |
 |---|---|---|
-| R1 | `frappe_paystack` (everything except `integrations/erpnext/**`, `paystack_erpnext/**` and adapter tests) imports only the stdlib, `frappe`, `payments` and allowed third-party libraries | AST import guard test in CI + an import smoke test in a site without ERPNext |
+| R1 | `paystack_frappe` (everything except `integrations/erpnext/**`, `paystack_erpnext/**` and adapter tests) imports only the stdlib, `frappe`, `payments` and allowed third-party libraries | AST import guard test in CI + an import smoke test in a site without ERPNext |
 | R2 | `integrations/erpnext` imports ERPNext only inside functions (or modules only reachable through ERPNext DocTypes/hooks) and is never imported by core | same guard |
 | R3 | Core never names an application (`lms`, `education`, `erpnext`). Business behaviour is chosen by **reference DocType adapter lookup**. | review + guard (string scan) |
 | R4 | Hooks are static. Everything they point to must be import-safe without ERPNext. | smoke test that renders a web page and the Jinja environment without ERPNext |
 | R5 | ERPNext presence is detected only in `integrations.erpnext.is_available()`, called from the install lifecycle, scheduler guards and `www/my-payments` | grep in CI |
 | R6 | The browser never supplies amount, currency or reference | code review + tamper tests |
 
-### 9.3 Extension points defined by frappe_paystack
+### 9.3 Extension points defined by paystack_frappe
 
 | Hook (in any app's `hooks.py`) | Contract |
 |---|---|
@@ -704,8 +704,8 @@ flowchart LR
 | Surface | Items |
 |---|---|
 | Payments v1 controller (`PaystackGatewaySetting`) | `validate_transaction_currency`, `validate_minimum_transaction_amount`, `get_payment_url`, `on_payment_request_submission` (delegates to the adapter if registered; otherwise checks currency), `request_for_payment` (delegates to the adapter; otherwise a clear error), `refund_payment`, `fetch_refund`, `fetch_refunds`, `get_supported_currencies` |
-| Whitelisted (`frappe_paystack.api`) | `paystack_webhook` (same path), `start_checkout`, `verify_checkout`, `get_payment_status` (guest, session-capability), `payment_link_qr`, `refund` (DocPerm), plus **shims** at every legacy dotted path listed in §3.7 |
-| Server-side Python (`frappe_paystack.core.api`) | `create_session(...)`, `charge_saved_authorization(...)`, `refund_payment(...)`, `get_session(...)`, for apps that want Paystack-specific features |
+| Whitelisted (`paystack_frappe.api`) | `paystack_webhook` (same path), `start_checkout`, `verify_checkout`, `get_payment_status` (guest, session-capability), `payment_link_qr`, `refund` (DocPerm), plus **shims** at every legacy dotted path listed in §3.7 |
+| Server-side Python (`paystack_frappe.core.api`) | `create_session(...)`, `charge_saved_authorization(...)`, `refund_payment(...)`, `get_session(...)`, for apps that want Paystack-specific features |
 
 ### 9.5 Activation of the ERPNext adapter
 
@@ -722,11 +722,11 @@ flowchart LR
 ## 10. Module and file structure (target)
 
 ```text
-frappe_paystack/
+paystack_frappe/
 ├── hooks.py                      # static; required_apps = ["payments"]; adapter hooks point to import-safe paths
 ├── install.py                    # after_install, after_app_install, before_app_uninstall, after_migrate, before_uninstall
 ├── api.py                        # stable whitelisted endpoints + legacy shims (thin; delegates to core/adapters)
-├── modules.txt                   # "Frappe Paystack", "Paystack ERPNext"
+├── modules.txt                   # "Paystack Frappe", "Paystack ERPNext"
 ├── patches.txt / patches/        # v15_0 (existing, made import-safe) + new migration patches
 ├── core/                         # ← imports frappe + payments only (CI-enforced)
 │   ├── constants.py              # currencies, minimums, statuses, event names, Paystack webhook IPs
@@ -745,7 +745,7 @@ frappe_paystack/
 │   ├── adapters.py               # ReferenceAdapter base + registry
 │   ├── portal.py                 # checkout context, website-permission dispatcher, jinja helpers (link/QR)
 │   └── api.py                    # server-side Python API (§9.4)
-├── frappe_paystack/              # module "Frappe Paystack": core DocTypes & records
+├── paystack_frappe/              # module "Paystack Frappe": core DocTypes & records
 │   ├── doctype/paystack_gateway_setting|paystack_payment_log|paystack_refund_log|
 │   │          paystack_customer_authorization|paystack_reconciliation_log|paystack_settlement
 │   ├── report/paystack_transactions, report/paystack_activity
@@ -874,7 +874,7 @@ frappe_paystack/
 
 All patches are idempotent, import-safe without ERPNext, and skip ERPNext data when ERPNext is absent.
 
-**Operational continuity:** the webhook URL (`/api/method/frappe_paystack.api.paystack_webhook`), checkout links already sent to customers (`/paystack-checkout/<log>`), the Payment Gateway name "Paystack", Payment Gateway Accounts and whitelisted method paths all stay valid.
+**Operational continuity:** the webhook URL (`/api/method/paystack_frappe.api.paystack_webhook`), checkout links already sent to customers (`/paystack-checkout/<log>`), the Payment Gateway name "Paystack", Payment Gateway Accounts and whitelisted method paths all stay valid.
 
 **Rollback:** take a backup before migrating. The patches only add columns and map values (with `legacy_status` kept). A down-migration script can restore the upstream statuses from `legacy_status`.
 
@@ -890,7 +890,7 @@ All patches are idempotent, import-safe without ERPNext, and skip ERPNext data w
 | ERPNext | Optional. Tested with ERPNext `version-15` / `version-16` in adapter CI jobs. Never listed in `required_apps` or `pyproject`. The README documents optional features. |
 | LMS / Education / Webshop | LMS `version-15`/`version-16` (identical today); Education `version-15.x`/`version-16` (ERPNext required); Webshop through the Payment Request adapter. |
 | Branching | Mirror upstream: `version-15` and `version-16` differ only in pins/CI (as today). |
-| Public API | Keep every legacy whitelisted dotted path (§3.7) as a shim for one major version; keep `frappe_paystack.utils` as a lazy facade (PEP 562 `__getattr__`) so third-party imports keep working without importing ERPNext eagerly. |
+| Public API | Keep every legacy whitelisted dotted path (§3.7) as a shim for one major version; keep `paystack_frappe.utils` as a lazy facade (PEP 562 `__getattr__`) so third-party imports keep working without importing ERPNext eagerly. |
 | URLs | `/paystack-checkout/<ref>` and the webhook path are unchanged; the hosted `callback_url` moves to the same page. |
 | DocType names | Unchanged (Payment Log, Refund Log, …), so links, reports, print formats and user customisations keep working. |
 | Install orders | Paystack → ERPNext later (`after_app_install`); ERPNext first (`after_install`); ERPNext uninstalled (`before_app_uninstall` removes customisations, keeps data). |
@@ -902,16 +902,16 @@ All patches are idempotent, import-safe without ERPNext, and skip ERPNext data w
 
 **Environments**
 
-- **E1:** Frappe + Payments + frappe_paystack (no ERPNext). v15 and v16.
+- **E1:** Frappe + Payments + paystack_frappe (no ERPNext). v15 and v16.
 - **E2:** E1 + LMS.
-- **E3:** Frappe + ERPNext + Payments + frappe_paystack (+ Webshop variant).
+- **E3:** Frappe + ERPNext + Payments + paystack_frappe (+ Webshop variant).
 - **E4:** E3 + Education.
 
 All run in CI with MariaDB + Redis services. Paystack HTTP is faked at the `PaystackClient` boundary, plus an optional manual test-mode checklist against the real sandbox.
 
 | Scenario | E1 | E2 | E3 | E4 | Key assertions |
 |---|---|---|---|---|---|
-| Install (`install-app payments` then `frappe_paystack`; `list-apps` shows no ERPNext) | ✓ | ✓ | ✓ | ✓ | no ERPNext pulled in; web page + Jinja render OK |
+| Install (`install-app payments` then `paystack_frappe`; `list-apps` shows no ERPNext) | ✓ | ✓ | ✓ | ✓ | no ERPNext pulled in; web page + Jinja render OK |
 | Migrate (`bench migrate` twice; upgrade from upstream v15 fixtures) | ✓ | | ✓ | | idempotent patches; status mapping; custom-field re-attachment keeps data |
 | Import guard (AST) + import smoke test without ERPNext | ✓ | | | | 0 core modules import ERPNext |
 | Settings (keys/test-mode, currencies, webhook secret override) | ✓ | | ✓ | | key-mode validation; no company required in E1 |
@@ -939,7 +939,7 @@ All run in CI with MariaDB + Redis services. Paystack HTTP is faked at the `Pays
 | Education: Student Applicant Web Form; Fees via Payment Request | | | | ✓ | `paid=1`; PR paid + Payment Entry |
 | ERPNext features: SI/SO links, PR + Webshop, POS phone/link, Dunning, subscriptions, Payment Entry sweep, credit-note refund, settlement Journal Entry, reconciliation, saved cards, portal, reports, print formats | | | ✓ | | parity with the upstream suite (ported, not rewritten) |
 | Install order: Paystack then ERPNext; ERPNext uninstall | | | ✓ | | activation/deactivation idempotent |
-| Legacy shims (old dotted paths, `frappe_paystack.utils` facade) | ✓ | | ✓ | | no ERPNext import on E1 |
+| Legacy shims (old dotted paths, `paystack_frappe.utils` facade) | ✓ | | ✓ | | no ERPNext import on E1 |
 
 ---
 
@@ -948,30 +948,30 @@ All run in CI with MariaDB + Redis services. Paystack HTTP is faked at the `Pays
 | Path | Change |
 |---|---|
 | `pyproject.toml` | Remove `erpnext` from `[tool.bench.frappe-dependencies]`; Python ≥3.10 (v15 branch); version bump |
-| `frappe_paystack/__init__.py` | version |
-| `frappe_paystack/hooks.py` | `required_apps=["payments"]`; hooks re-pointed to `core` and import-safe adapter paths; add `after_app_install`, `before_app_uninstall`, `after_migrate`; register `paystack_reference_adapters` / resolvers / broadcast hooks; adapter JS paths |
-| `frappe_paystack/setup.py` | Split: core install → `install.py`; ERPNext parts → `integrations/erpnext/setup.py`; keep import-compatible names for old patches |
-| `frappe_paystack/api.py` | Keep generic endpoints (webhook, checkout, QR, refund); move ERPNext endpoints to the adapter; add shims |
-| `frappe_paystack/events.py` | Becomes a shim; logic → `integrations/erpnext/sales_invoice.py` / `refunds.py` |
-| `frappe_paystack/migration.py` | Import-safe; lazy ERPNext constants; new mapping helpers |
-| `frappe_paystack/utils/__init__.py`, `utils/utils.py` | Split into `core/*` (money, client, signature, accounts, sweeps) and `integrations/erpnext/accounts.py`; the package becomes a lazy compatibility facade |
-| `frappe_paystack/utils/payment_request.py`, `portal.py`, `pos_payment.py`, `subscription.py` | Move to `integrations/erpnext/*`; shims at the old paths (whitelisted ones included) |
-| `frappe_paystack/utils/settlement.py` | Split: `core/settlements.py` (facts) + `integrations/erpnext/settlement.py` (Journal Entry) |
-| `frappe_paystack/utils/reconciliation.py`, `reconciliation_api.py`, `scheduled_jobs.py`, `sweep.py`, `printing.py`, `qr.py` | Move to core; remove company requirement / ERPNext roles; per-account iteration |
-| `frappe_paystack/frappe_paystack/doctype/*/…json` (6) | Remove ERPNext fields (now adapter Custom Fields); add generic fields (§6.2, §11.3); statuses; permissions |
-| `frappe_paystack/frappe_paystack/doctype/*/…py` (6) | Remove ERPNext imports and logic; delegate to core and adapters |
+| `paystack_frappe/__init__.py` | version |
+| `paystack_frappe/hooks.py` | `required_apps=["payments"]`; hooks re-pointed to `core` and import-safe adapter paths; add `after_app_install`, `before_app_uninstall`, `after_migrate`; register `paystack_reference_adapters` / resolvers / broadcast hooks; adapter JS paths |
+| `paystack_frappe/setup.py` | Split: core install → `install.py`; ERPNext parts → `integrations/erpnext/setup.py`; keep import-compatible names for old patches |
+| `paystack_frappe/api.py` | Keep generic endpoints (webhook, checkout, QR, refund); move ERPNext endpoints to the adapter; add shims |
+| `paystack_frappe/events.py` | Becomes a shim; logic → `integrations/erpnext/sales_invoice.py` / `refunds.py` |
+| `paystack_frappe/migration.py` | Import-safe; lazy ERPNext constants; new mapping helpers |
+| `paystack_frappe/utils/__init__.py`, `utils/utils.py` | Split into `core/*` (money, client, signature, accounts, sweeps) and `integrations/erpnext/accounts.py`; the package becomes a lazy compatibility facade |
+| `paystack_frappe/utils/payment_request.py`, `portal.py`, `pos_payment.py`, `subscription.py` | Move to `integrations/erpnext/*`; shims at the old paths (whitelisted ones included) |
+| `paystack_frappe/utils/settlement.py` | Split: `core/settlements.py` (facts) + `integrations/erpnext/settlement.py` (Journal Entry) |
+| `paystack_frappe/utils/reconciliation.py`, `reconciliation_api.py`, `scheduled_jobs.py`, `sweep.py`, `printing.py`, `qr.py` | Move to core; remove company requirement / ERPNext roles; per-account iteration |
+| `paystack_frappe/paystack_frappe/doctype/*/…json` (6) | Remove ERPNext fields (now adapter Custom Fields); add generic fields (§6.2, §11.3); statuses; permissions |
+| `paystack_frappe/paystack_frappe/doctype/*/…py` (6) | Remove ERPNext imports and logic; delegate to core and adapters |
 | `…/paystack_gateway_setting/paystack_gateway_setting.js` | A real connectivity/signature test instead of the no-op |
 | `…/paystack_payment_log/paystack_payment_log.js`, `…/paystack_refund_log/paystack_refund_log.js` | Generic actions; ERPNext buttons injected by adapter JS |
-| `frappe_paystack/www/paystack-checkout/index.py`, `index.html`, `public/js/paystack_checkout.js`, `public/css/paystack_checkout.css` | Generic context; server-initialised inline (`resumeTransaction`) / hosted; verify-on-return; redirect; guest email capture |
-| `frappe_paystack/www/my-payments/*` | Delegate to the adapter; 404 without ERPNext |
-| `frappe_paystack/public/js/{sales_invoice,sales_order,dunning}.js`, `paystack_actions.bundle.js`, `paystack_pos.bundle.js`, `paystack_cart_guard.bundle.js` | Move under `public/js/erpnext/`; endpoint paths → adapter |
-| `frappe_paystack/frappe_paystack/report/paystack_transactions`, `paystack_activity` | Generalise (payer/reference instead of Customer; adapter columns) |
-| `frappe_paystack/frappe_paystack/report/{customer_paystack_volume,paystack_unsettled_payments,paystack_settlements_vs_ledger}` | Move to module `Paystack ERPNext` + guard |
-| `frappe_paystack/frappe_paystack/print_format/paystack_invoice_with_payment_link` | Move to `Paystack ERPNext` |
-| `frappe_paystack/frappe_paystack/workspace/paystack_dashboard` | Core links; adapter links/cards added on activation |
-| `frappe_paystack/modules.txt`, `patches.txt` | Add module and patches |
-| `frappe_paystack/patches/v15_0/*` | Import-safe; skip ERPNext data when ERPNext is absent |
-| `frappe_paystack/tests/session_setup.py`, `test_base.py`, `factories.py`, `test_*.py` | Split core/LMS/ERPNext; ERPNext bootstrap only in adapter tests |
+| `paystack_frappe/www/paystack-checkout/index.py`, `index.html`, `public/js/paystack_checkout.js`, `public/css/paystack_checkout.css` | Generic context; server-initialised inline (`resumeTransaction`) / hosted; verify-on-return; redirect; guest email capture |
+| `paystack_frappe/www/my-payments/*` | Delegate to the adapter; 404 without ERPNext |
+| `paystack_frappe/public/js/{sales_invoice,sales_order,dunning}.js`, `paystack_actions.bundle.js`, `paystack_pos.bundle.js`, `paystack_cart_guard.bundle.js` | Move under `public/js/erpnext/`; endpoint paths → adapter |
+| `paystack_frappe/paystack_frappe/report/paystack_transactions`, `paystack_activity` | Generalise (payer/reference instead of Customer; adapter columns) |
+| `paystack_frappe/paystack_frappe/report/{customer_paystack_volume,paystack_unsettled_payments,paystack_settlements_vs_ledger}` | Move to module `Paystack ERPNext` + guard |
+| `paystack_frappe/paystack_frappe/print_format/paystack_invoice_with_payment_link` | Move to `Paystack ERPNext` |
+| `paystack_frappe/paystack_frappe/workspace/paystack_dashboard` | Core links; adapter links/cards added on activation |
+| `paystack_frappe/modules.txt`, `patches.txt` | Add module and patches |
+| `paystack_frappe/patches/v15_0/*` | Import-safe; skip ERPNext data when ERPNext is absent |
+| `paystack_frappe/tests/session_setup.py`, `test_base.py`, `factories.py`, `test_*.py` | Split core/LMS/ERPNext; ERPNext bootstrap only in adapter tests |
 | `.github/workflows/ci.yml`, `.github/scripts/*` | Matrix E1 to E4 × v15/v16 + import guard |
 | `README.md` | Installation without ERPNext, configuration, LMS, ERPNext features |
 
@@ -981,13 +981,13 @@ If D1 = A (local lineage), every current file is replaced (`setup.py`, `requirem
 
 | Path | Purpose |
 |---|---|
-| `frappe_paystack/install.py` | install/uninstall/migrate lifecycle + adapter activation |
-| `frappe_paystack/core/{__init__,constants,money,client,accounts,session,lifecycle,notify,webhook,refunds,authorizations,reconciliation,settlements,sweeps,adapters,portal,api}.py` | Core (§10) |
-| `frappe_paystack/integrations/__init__.py`, `integrations/erpnext/{__init__,setup,accounts,adapters,payment_request,payment_entry,sales_invoice,sales_order,dunning,pos,subscriptions,refunds,settlement,reconciliation,portal,api}.py` | ERPNext adapter (§11) |
-| `frappe_paystack/paystack_erpnext/__init__.py` (+ moved reports/print format folders) | Module for ERPNext-only standard records |
-| `frappe_paystack/patches/v15_1/*.py` (status mapping, reference rename, gateway back-fill, payer back-fill, adapter fields, job/patch renames, refund normalisation) | Migration (§12.3) |
-| `frappe_paystack/tests/support/{fixtures,paystack_fake,import_guard}.py` | Test support without ERPNext |
-| `frappe_paystack/tests/core/test_*.py`, `tests/lms/test_lms_flow.py`, `tests/erpnext/…` (ported), `integrations/erpnext/tests/*` | Test suites (§14) |
+| `paystack_frappe/install.py` | install/uninstall/migrate lifecycle + adapter activation |
+| `paystack_frappe/core/{__init__,constants,money,client,accounts,session,lifecycle,notify,webhook,refunds,authorizations,reconciliation,settlements,sweeps,adapters,portal,api}.py` | Core (§10) |
+| `paystack_frappe/integrations/__init__.py`, `integrations/erpnext/{__init__,setup,accounts,adapters,payment_request,payment_entry,sales_invoice,sales_order,dunning,pos,subscriptions,refunds,settlement,reconciliation,portal,api}.py` | ERPNext adapter (§11) |
+| `paystack_frappe/paystack_erpnext/__init__.py` (+ moved reports/print format folders) | Module for ERPNext-only standard records |
+| `paystack_frappe/patches/v15_1/*.py` (status mapping, reference rename, gateway back-fill, payer back-fill, adapter fields, job/patch renames, refund normalisation) | Migration (§12.3) |
+| `paystack_frappe/tests/support/{fixtures,paystack_fake,import_guard}.py` | Test support without ERPNext |
+| `paystack_frappe/tests/core/test_*.py`, `tests/lms/test_lms_flow.py`, `tests/erpnext/…` (ported), `integrations/erpnext/tests/*` | Test suites (§14) |
 | `docs/architecture.md`, `docs/migration.md`, `docs/integrating-an-app.md` | Developer docs (v1 contract, hooks, adapters) |
 
 ---
@@ -1036,18 +1036,18 @@ If D1 = A (local lineage), every current file is replaced (`setup.py`, `requirem
 
 ### A.1 Allowed dependency and call direction
 
-| From ↓ / To → | Frappe | Payments | frappe_paystack core | ERPNext adapter | ERPNext | Paystack API | Consuming app |
+| From ↓ / To → | Frappe | Payments | paystack_frappe core | ERPNext adapter | ERPNext | Paystack API | Consuming app |
 |---|---|---|---|---|---|---|---|
 | **Consuming app** (LMS, Web Form, Education, …) | imports | imports (`get_payment_gateway_controller`) | runtime only, through the controller returned by Payments (optional server API) | no | no | no | n/a |
 | **Payments** | imports | n/a | runtime (controller doc) | no | lazy/guarded only | own gateways only | runtime (`run_method`) |
-| **frappe_paystack core** | imports | imports (`create_payment_gateway`, `get_payment_gateway_controller`) | n/a | **never imports**; dispatches through the hook registry | **never** | HTTPS | runtime callbacks only (`run_method`, `doc_events`, hooks) |
+| **paystack_frappe core** | imports | imports (`create_payment_gateway`, `get_payment_gateway_controller`) | n/a | **never imports**; dispatches through the hook registry | **never** | HTTPS | runtime callbacks only (`run_method`, `doc_events`, hooks) |
 | **ERPNext adapter** | imports | imports | imports | n/a | lazy imports | through core only | n/a |
 | **ERPNext** | imports | guarded import | runtime (duck-typed controller calls; `payment_gateway_enabled` subscriber) | no | n/a | no | n/a |
 | **Paystack** | n/a | n/a | webhooks | no | no | n/a | no |
 
 ### A.2 Responsibility matrix
 
-| Responsibility | Frappe | Payments | Paystack (external) | frappe_paystack core | Consuming app | ERPNext (+ adapter) |
+| Responsibility | Frappe | Payments | Paystack (external) | paystack_frappe core | Consuming app | ERPNext (+ adapter) |
 |---|---|---|---|---|---|---|
 | Business document, price, what is being sold | | | | | **owns** | owns (SI/SO/PR/POS) |
 | Choosing the gateway | | registry | | | **decides** | PGA per company |

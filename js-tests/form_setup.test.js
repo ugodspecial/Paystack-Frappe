@@ -10,12 +10,12 @@ import {
 } from "./web_stubs.js";
 
 install_web_globals();
-await import("../frappe_paystack/public/js/erpnext/paystack_actions.bundle.js");
-const actions = globalThis.frappe_paystack.actions;
+await import("../paystack_frappe/public/js/erpnext/paystack_actions.bundle.js");
+const actions = globalThis.paystack_frappe.actions;
 
-const ENABLED = "frappe_paystack.api.is_enabled_for_company";
-const CREATE_LINK = "frappe_paystack.api.create_payment_link";
-const CUSTOMER_EMAIL = "frappe_paystack.utils.get_customer_email";
+const ENABLED = "paystack_frappe.integrations.erpnext.api.is_enabled_for_company";
+const CREATE_LINK = "paystack_frappe.integrations.erpnext.api.create_payment_link";
+const CUSTOMER_EMAIL = "paystack_frappe.integrations.erpnext.accounts.get_customer_email";
 const SEND_EMAIL = "frappe.core.doctype.communication.email.make";
 
 const CHECKOUT_URL = "https://site.test/paystack-checkout/PSLOG-9";
