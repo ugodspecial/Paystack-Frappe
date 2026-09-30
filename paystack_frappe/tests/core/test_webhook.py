@@ -138,6 +138,41 @@ class TestWebhookProcessing(PaystackTestCase):
         self.assertIn("expects", session.errors)
         self.assertEqual(self.recorder.calls, [])
 
+    def test_fee_passed_to_the_customer_marks_paid(self):
+        """With Paystack's "Pass fees automatically", the customer pays the fee on top of the listed amount."""
+        session_name = self.session_of(self.payment_url(amount=5000))
+        self.start(session_name)
+        self.pay_and_notify(session_name, amount=507500, fees=7500)  # subunits: 5000 NGN + 75 NGN fee
+        session = self.session(session_name)
+        self.assertEqual(session.status, PAID)
+        self.assertIsNone(session.errors)
+        self.assertEqual(session.amount_paid, 5075.0)
+        self.assertEqual(session.paystack_fee, 75.0)
+        self.assertEqual(len(self.recorder.calls), 1)
+
+    def test_an_arbitrary_overpayment_still_needs_attention(self):
+        session_name = self.session_of(self.payment_url(amount=5000))
+        self.start(session_name)
+        self.pay_and_notify(session_name, amount=507500, fees=150)  # the net does not match either
+        self.assertEqual(self.session(session_name).status, NEEDS_ATTENTION)
+        self.assertEqual(self.recorder.calls, [])
+
+    def test_flagged_capture_can_be_accepted_from_the_desk(self):
+        session_name = self.session_of(self.payment_url(amount=5000))
+        self.start(session_name)
+        self.pay_and_notify(session_name, amount=100000)  # underpaid: flagged, not notified
+        self.assertEqual(self.session(session_name).status, NEEDS_ATTENTION)
+
+        result = frappe.get_doc(PAYMENT_LOG, session_name).accept_as_paid()
+        self.assertEqual(result["status"], PAID)
+        session = self.session(session_name)
+        self.assertEqual(session.status, PAID)
+        self.assertIsNone(session.errors)
+        self.assertEqual(len(self.recorder.calls), 1)  # the consumer is notified on acceptance
+
+        # only payments under review can be accepted
+        self.assertRaises(frappe.ValidationError, frappe.get_doc(PAYMENT_LOG, session_name).accept_as_paid)
+
     def test_currency_mismatch_needs_attention(self):
         session_name = self.session_of(self.payment_url(amount=5000))
         self.start(session_name)
