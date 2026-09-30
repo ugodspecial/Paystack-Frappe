@@ -129,7 +129,12 @@ def settlement_mismatch(session: Any, request: Any) -> Optional[str]:
         rate = flt(frappe.db.get_value(request.reference_doctype, request.reference_name, "conversion_rate")) or 1.0
     if money_currency(session) == money_currency_of(request):
         rate = 1.0
-    captured = flt(flt(session.amount_paid) / rate, request.precision("grand_total"))
+    # With "Pass fees automatically" on the Paystack dashboard the customer
+    # pays the fee on top; the request bills what the merchant nets.
+    captured = flt(
+        (flt(session.amount_paid) - flt(session.get("paystack_fee") or 0)) / rate,
+        request.precision("grand_total"),
+    )
     expected = flt(request.get("outstanding_amount") or request.grand_total)
     if abs(captured - expected) <= SETTLEMENT_TOLERANCE:
         return None

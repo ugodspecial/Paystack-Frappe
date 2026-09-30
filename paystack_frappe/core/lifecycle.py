@@ -354,10 +354,16 @@ def _apply_success(session: Any, tx: frappe._dict, via: str, payment_succeeded) 
 
     expected_minor = money.to_minor(session.amount, session.currency)
     captured_minor = cint(tx.amount)
+    fees_minor = cint(tx.fees)
     mismatch = None
     if currency != money.clean_currency(session.currency):
         mismatch = _("Paystack charged {0} but this payment expects {1}.").format(currency or "?", session.currency)
-    elif captured_minor != expected_minor:
+    elif captured_minor != expected_minor and captured_minor - fees_minor != expected_minor:
+        # A capture is the listed amount, or - with "Pass fees automatically"
+        # enabled on the Paystack dashboard - the listed amount plus the
+        # transaction fee the customer bears: Paystack retains the fee and the
+        # merchant nets the listed amount. Anything else did not pay this
+        # payment what it asked for.
         mismatch = _("Paystack captured {0} but this payment expects {1}.").format(
             money.format_amount(money.from_minor(captured_minor), currency),
             money.format_amount(session.amount, session.currency),

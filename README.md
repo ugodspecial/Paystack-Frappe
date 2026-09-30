@@ -179,7 +179,13 @@ Pending ──▶ Paid ──▶ Partially Refunded ──▶ Refunded
 * **Verify before trust.** The browser return, the popup, the webhook, the scheduler
   sweep and the desk **Verify with Paystack** button all end in one locked transition.
   That transition checks the reference, the account, the status, the amount in
-  subunits and the currency.
+  subunits and the currency. A capture may be the payment's amount, or - with
+  Paystack's *Pass fees automatically* setting - that amount plus the transaction
+  fee the customer bears on top: it is accepted when the merchant nets the payment's
+  amount. Anything else (an underpayment, an unrelated overpayment, a duplicate
+  capture, a reversal) parks the payment at *Needs Attention*; a money manager who
+  has checked the capture on the Paystack dashboard can **Accept as Paid**, which
+  marks the payment Paid and notifies the application.
 * **Webhooks** are authenticated with HMAC-SHA512 of the raw body, recorded and
   acknowledged at once, then processed in the background. Redelivered events are
   deduplicated. Events whose processing failed are processed again on redelivery, and

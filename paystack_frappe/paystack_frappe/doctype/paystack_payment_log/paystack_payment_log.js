@@ -84,6 +84,18 @@ frappe.ui.form.on("Paystack Payment Log", {
 			);
 		}
 
+		if (frm.doc.status === "Needs Attention" && frm.doc.transaction_id) {
+			frm.add_custom_button(
+				__("Accept as Paid"),
+				() =>
+					frappe.confirm(
+						__("Accept the captured transaction as paid and notify the application?"),
+						() => frm.call("accept_as_paid").then(() => frm.reload_doc())
+					),
+				group
+			);
+		}
+
 		if (frm.doc.transaction_id) {
 			frm.add_custom_button(
 				__("Open in Paystack"),

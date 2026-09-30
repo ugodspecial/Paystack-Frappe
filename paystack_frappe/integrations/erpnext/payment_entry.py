@@ -95,7 +95,10 @@ def book_payment_entry(payment_log_name: str) -> Optional[str]:
 
         party_account = party_account_for(inv)
         rate = party_account_rate(inv, party_account)
-        paid_amount = flt(flt(log.amount_paid) / rate, inv.precision("grand_total"))
+        # The document is settled at its own amount: with "Pass fees
+        # automatically" on the Paystack dashboard the customer pays that
+        # amount plus the fee, and the merchant nets the amount.
+        paid_amount = flt(min(flt(log.amount_paid), flt(log.amount)) / rate, inv.precision("grand_total"))
         if paid_amount <= 0:
             return None
 

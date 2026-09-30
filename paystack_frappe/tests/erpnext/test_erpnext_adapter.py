@@ -125,6 +125,38 @@ class TestPayments(ERPNextTestCase):
         self.assertEqual(frappe.db.count("Payment Entry Reference", {"payment_request": request.name, "docstatus": 1}) or
                          frappe.db.count("Payment Entry", {"reference_no": request.name, "docstatus": 1}), 1)
 
+    def test_payment_link_with_the_fee_passed_to_the_customer(self):
+        """Paystack's "Pass fees automatically": the customer pays the fee on top, the request bills the net."""
+        from paystack_frappe.integrations.erpnext.api import create_payment_link
+
+        invoice = self.invoice()
+        session_name = self.session_of(create_payment_link("Sales Invoice", invoice.name))
+        self.start(session_name)
+        self.pay_and_notify(session_name, amount=507500, fees=7500)  # subunits: 5000 NGN + 75 NGN fee
+
+        session = self.session(session_name)
+        self.assertEqual(session.status, PAID)
+        self.assertEqual(session.amount_paid, 5075.0)
+        self.assertEqual(session.paystack_fee, 75.0)
+        self.assertEqual(session.booking_status, "Booked")  # not "Needs Attention": the net matches
+        request = frappe.get_doc("Payment Request", session.payment_request)
+        self.assertEqual(request.status, "Paid")
+        self.assertEqual(flt(frappe.db.get_value("Sales Invoice", invoice.name, "outstanding_amount")), 0)
+
+    def test_direct_payment_with_the_fee_passed_to_the_customer_books_the_net(self):
+        invoice = self.invoice()
+        session_name = self.direct_session(invoice)
+        self.start(session_name)
+        self.pay_and_notify(session_name, amount=507500, fees=7500)  # subunits: 5000 NGN + 75 NGN fee
+
+        session = self.session(session_name)
+        self.assertEqual(session.status, PAID)
+        self.assertEqual(session.booking_status, "Booked")
+        pe = frappe.get_doc("Payment Entry", session.payment_entry)
+        self.assertEqual(pe.docstatus, 1)
+        self.assertEqual(flt(pe.paid_amount), 5000)  # the document settles at its own amount
+        self.assertEqual(flt(frappe.db.get_value("Sales Invoice", invoice.name, "outstanding_amount")), 0)
+
     @requires("webshop")
     def test_webshop_override_does_not_book_twice(self):
         """Webshop's on_payment_authorized calls set_as_paid() itself; the adapter must not repeat it."""

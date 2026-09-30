@@ -18,6 +18,16 @@
   history and scheduler state. CI proves it: the upgrade job installs upstream
   `mymi14s/frappe_paystack` 15.5.0, seeds data, adopts the renamed app and migrates.
 
+### Fixed
+- Payments made with Paystack's **Pass fees automatically** (the customer pays the
+  transaction fee on top of the listed amount, the merchant nets the listed amount)
+  are marked **Paid** instead of *Needs Attention*: the verifier accepts a capture
+  whose net is the payment's amount, Payment Requests settle at the net amount, and
+  direct-link Payment Entries book the document's own amount.
+- New desk action **Accept as Paid** on a payment under review (money managers):
+  accept a capture checked against the Paystack dashboard, mark the payment Paid
+  and notify the application - the remedy for payments flagged before this fix.
+
 ### Upgrading from frappe_paystack
 
 1. `bench get-app paystack_frappe https://github.com/ugodspecial/Paystack-Frappe`

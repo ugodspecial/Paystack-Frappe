@@ -23,6 +23,7 @@ from paystack_frappe.core.constants import (
     NOTIFY_DONE,
     NOTIFY_NOT_REQUIRED,
     NOTIFICATION_STATUSES,
+    PAID,
     SESSION_STATUSES,
 )
 
