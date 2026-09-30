@@ -405,6 +405,46 @@ def _apply_success(session: Any, tx: frappe._dict, via: str, payment_succeeded) 
     return OUTCOME_PAID
 
 
+def accept_as_paid(session_name: str) -> dict:
+    """
+    Manually approve a captured transaction that was flagged for review.
+
+    The transaction details were already recorded by ``_apply_success``; this
+    action changes only the local decision after a money manager has checked
+    the capture in Paystack. Notification happens after the approved state is
+    durable so a consumer failure can be retried without losing the decision.
+    """
+    from paystack_frappe.core.notify import notify_success, payment_succeeded
+
+    session = lock(session_name)
+    if session.status != NEEDS_ATTENTION or not session.transaction_id:
+        frappe.throw(
+            _("Only a captured payment under review can be accepted as paid."),
+            frappe.ValidationError,
+        )
+
+    session.db_set(
+        {
+            "status": PAID,
+            "errors": None,
+            "completed_via": VIA_MANUAL,
+            "completed_by": current_user(),
+            "completed_at": now_datetime(),
+        },
+        update_modified=True,
+    )
+    frappe.db.commit()
+
+    payment_succeeded(session_name)
+    redirect = notify_success(session_name, force=True)
+    session = frappe.get_doc(PAYMENT_LOG, session_name)
+    return {
+        "status": session.status,
+        "notification_status": session.notification_status,
+        "redirect": redirect,
+    }
+
+
 def manual_verify(session_name: str) -> dict:
     """Desk action: verify with Paystack and (re)notify, as the session's run-as user."""
     return verify(session_name, via=VIA_MANUAL)
