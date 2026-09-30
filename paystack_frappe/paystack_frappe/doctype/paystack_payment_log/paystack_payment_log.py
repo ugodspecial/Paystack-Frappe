@@ -83,6 +83,14 @@ class PaystackPaymentLog(Document):
         return self.verify_with_paystack()
 
     @frappe.whitelist()
+    def accept_as_paid(self) -> dict:
+        """Accept a captured payment under review and notify its consumer."""
+        from paystack_frappe.core.lifecycle import accept_as_paid
+
+        self._check_manage()
+        return accept_as_paid(self.name)
+
+    @frappe.whitelist()
     def retry_notification(self) -> dict:
         """Notify the consumer again now (skipping the back-off), as the run-as user."""
         from paystack_frappe.core.notify import notify_success, reset_notification
