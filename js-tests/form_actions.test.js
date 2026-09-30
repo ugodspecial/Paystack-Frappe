@@ -4,14 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flush, install_web_globals, recorded, replies } from "./web_stubs.js";
 
 install_web_globals();
-await import("../frappe_paystack/public/js/erpnext/paystack_actions.bundle.js");
-const actions = globalThis.frappe_paystack.actions;
+await import("../paystack_frappe/public/js/erpnext/paystack_actions.bundle.js");
+const actions = globalThis.paystack_frappe.actions;
 
-const ENABLED = "frappe_paystack.api.is_enabled_for_company";
-const CREATE_LINK = "frappe_paystack.api.create_payment_link";
-const QR = "frappe_paystack.api.payment_link_qr";
-const SAVED_CARDS = "frappe_paystack.api.saved_cards";
-const CHARGE = "frappe_paystack.api.charge_saved_card";
+const ENABLED = "paystack_frappe.integrations.erpnext.api.is_enabled_for_company";
+const CREATE_LINK = "paystack_frappe.integrations.erpnext.api.create_payment_link";
+const QR = "paystack_frappe.api.payment_link_qr";
+const SAVED_CARDS = "paystack_frappe.integrations.erpnext.api.saved_cards";
+const CHARGE = "paystack_frappe.integrations.erpnext.api.charge_saved_card";
 
 const CHECKOUT_URL = "https://site.test/paystack-checkout/PSLOG-9";
 

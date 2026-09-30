@@ -9,7 +9,7 @@ import {
 } from "./stubs.js";
 
 install_globals();
-const pos = await import("../frappe_paystack/public/js/erpnext/paystack_pos.bundle.js");
+const pos = await import("../paystack_frappe/public/js/erpnext/paystack_pos.bundle.js");
 
 async function flush() {
 	for (let index = 0; index < 8; index++) {
@@ -44,7 +44,7 @@ describe("send_payment_link", () => {
 		expect(frm.dirty).toHaveBeenCalled();
 		expect(frm.save).toHaveBeenCalled();
 		expect(frappe.call).toHaveBeenCalledWith({
-			method: "frappe_paystack.utils.pos_payment.send_pos_payment_link",
+			method: "paystack_frappe.integrations.erpnext.pos.send_pos_payment_link",
 			args: {
 				pos_invoice: "POS-INV-0001",
 				email: "buyer@example.com",
@@ -111,7 +111,7 @@ describe("paystack_request_for_payment", () => {
 		await pos.paystack_request_for_payment(frm);
 
 		expect(frappe.call.mock.calls[0][0].method).toBe(
-			"frappe_paystack.utils.pos_payment.send_pos_payment_link"
+			"paystack_frappe.integrations.erpnext.pos.send_pos_payment_link"
 		);
 	});
 

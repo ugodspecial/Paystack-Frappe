@@ -8,7 +8,7 @@ import { vi } from "vitest";
 // Paths resolve from the package root, which readFileSync opens under jsdom.
 // Read off disk, so each test evaluates it afresh.
 const CART_GUARD_SOURCE = fs.readFileSync(
-	path.resolve(process.cwd(), "frappe_paystack/public/js/erpnext/paystack_cart_guard.bundle.js"),
+	path.resolve(process.cwd(), "paystack_frappe/public/js/erpnext/paystack_cart_guard.bundle.js"),
 	"utf8"
 );
 
@@ -16,7 +16,7 @@ const CART_GUARD_SOURCE = fs.readFileSync(
 const UNSETTLED_REPORT_SOURCE = fs.readFileSync(
 	path.resolve(
 		process.cwd(),
-		"frappe_paystack/frappe_paystack/report/paystack_unsettled_payments/paystack_unsettled_payments.js"
+		"paystack_frappe/paystack_frappe/report/paystack_unsettled_payments/paystack_unsettled_payments.js"
 	),
 	"utf8"
 );
@@ -24,7 +24,7 @@ const UNSETTLED_REPORT_SOURCE = fs.readFileSync(
 const SETTLEMENTS_REPORT_SOURCE = fs.readFileSync(
 	path.resolve(
 		process.cwd(),
-		"frappe_paystack/frappe_paystack/report/paystack_settlements_vs_ledger/paystack_settlements_vs_ledger.js"
+		"paystack_frappe/paystack_frappe/report/paystack_settlements_vs_ledger/paystack_settlements_vs_ledger.js"
 	),
 	"utf8"
 );
@@ -37,7 +37,7 @@ Object.entries({
 	"Sales Order": "sales_order.js",
 }).forEach(([doctype, file]) => {
 	FORM_SCRIPT_SOURCES[doctype] = fs.readFileSync(
-		path.resolve(process.cwd(), `frappe_paystack/public/js/erpnext/${file}`),
+		path.resolve(process.cwd(), `paystack_frappe/public/js/erpnext/${file}`),
 		"utf8"
 	);
 });
@@ -46,7 +46,7 @@ Object.entries({
 const PAYMENT_LOG_FORM_SOURCE = fs.readFileSync(
 	path.resolve(
 		process.cwd(),
-		"frappe_paystack/frappe_paystack/doctype/paystack_payment_log/paystack_payment_log.js"
+		"paystack_frappe/paystack_frappe/doctype/paystack_payment_log/paystack_payment_log.js"
 	),
 	"utf8"
 );
@@ -55,7 +55,7 @@ const PAYMENT_LOG_FORM_SOURCE = fs.readFileSync(
 const RECONCILIATION_LOG_FORM_SOURCE = fs.readFileSync(
 	path.resolve(
 		process.cwd(),
-		"frappe_paystack/frappe_paystack/doctype/paystack_reconciliation_log/paystack_reconciliation_log.js"
+		"paystack_frappe/paystack_frappe/doctype/paystack_reconciliation_log/paystack_reconciliation_log.js"
 	),
 	"utf8"
 );
@@ -243,7 +243,7 @@ export function load_form_script(doctype) {
 			recorded.form_events[name] = events;
 		},
 	};
-	globalThis.frappe_paystack = { actions: { setupForm: vi.fn() } };
+	globalThis.paystack_frappe = { actions: { setupForm: vi.fn() } };
 
 	// eslint-disable-next-line no-new-func
 	new Function(FORM_SCRIPT_SOURCES[doctype])();

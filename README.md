@@ -1,4 +1,7 @@
-# Frappe Paystack
+# Paystack Frappe
+
+> Formerly **frappe_paystack** (upstream: [mymi14s/frappe_paystack](https://github.com/mymi14s/frappe_paystack)).
+> 17.0 renames the app in place - see [Upgrading](#upgrading-from-frappe_paystack-15x--16x-mymi14sfrappe_paystack).
 
 A [Paystack](https://paystack.com) payment gateway for **[Frappe Payments](https://github.com/frappe/payments)**.
 Any Frappe app that takes payments through the Payments app can use Paystack. ERPNext
@@ -7,7 +10,7 @@ Payment Entries, POS, Dunning, subscriptions, refunds with reversal entries,
 settlement journals and the customer portal.
 
 ```text
-Your app (LMS, Education, Web Forms, ERPNext, ...) ──▶ Frappe Payments ──▶ frappe_paystack ──▶ Paystack
+Your app (LMS, Education, Web Forms, ERPNext, ...) ──▶ Frappe Payments ──▶ paystack_frappe ──▶ Paystack
                                         ▲                                      │
                                         └──── on_payment_authorized ◀──────────┘
 ```
@@ -26,21 +29,21 @@ Your app (LMS, Education, Web Forms, ERPNext, ...) ──▶ Frappe Payments ─
 | Currencies | NGN, GHS, ZAR, KES, USD, XOF ([Paystack's list](https://paystack.com/docs/api/#supported-currency)) |
 
 `hooks.required_apps` is `["payments"]`. Nothing outside
-`frappe_paystack/integrations/erpnext` imports ERPNext, and CI enforces this.
+`paystack_frappe/integrations/erpnext` imports ERPNext, and CI enforces this.
 
 ## Install (no ERPNext needed)
 
 ```bash
 bench get-app payments https://github.com/frappe/payments --branch version-15   # or version-16 / develop
-bench get-app frappe_paystack https://github.com/ugodspecial/Paystack-Frappe
-bench --site your.site install-app frappe_paystack   # also installs payments (required_apps)
-bench --site your.site list-apps                     # frappe, payments, frappe_paystack
+bench get-app paystack_frappe https://github.com/ugodspecial/Paystack-Frappe
+bench --site your.site install-app paystack_frappe   # also installs payments (required_apps)
+bench --site your.site list-apps                     # frappe, payments, paystack_frappe
 ```
 
-`bench get-app --resolve-deps frappe_paystack <url>` can fetch Payments for you, because
+`bench get-app --resolve-deps paystack_frappe <url>` can fetch Payments for you, because
 `required_apps` names it as `frappe/payments`. Pass the Payments branch that matches your
 Frappe version if you fetch it yourself. `bench get-app` builds the app's assets. If you
-skipped that step, run `bench build --app frappe_paystack`.
+skipped that step, run `bench build --app paystack_frappe`.
 
 On a site that already has ERPNext, or when ERPNext is installed later, the ERPNext
 adapter activates itself. See [ERPNext features](#erpnext-features).
@@ -66,7 +69,7 @@ The first enabled account is available as the Payment Gateway **Paystack**. The 
 URL to paste into the Paystack dashboard:
 
 ```
-https://your.site/api/method/frappe_paystack.api.paystack_webhook
+https://your.site/api/method/paystack_frappe.api.paystack_webhook
 ```
 
 ### Where payment links point (localhost, Docker, a live domain)
@@ -106,7 +109,7 @@ host may still correct a missing port.
 
 ## Using Paystack from any app
 
-frappe_paystack implements the Payments gateway contract, so an app that works with
+paystack_frappe implements the Payments gateway contract, so an app that works with
 the Payments app works with Paystack without any Paystack-specific code:
 
 ```python
@@ -155,7 +158,7 @@ Consumers that already work this way:
   through the adapter.
 
 For Paystack-specific features, a server-side API is available in
-`frappe_paystack.core.api`: `create_session`, `get_checkout_url`, `verify_payment`,
+`paystack_frappe.core.api`: `create_session`, `get_checkout_url`, `verify_payment`,
 `refund_payment` and `charge_saved_authorization`.
 
 ## Payment lifecycle
@@ -279,9 +282,36 @@ paystack_checkout_context = [...]      # fn(session, context): extra rows on the
 paystack_manager_roles = ["My Role"]    # roles that may refund / charge saved cards
 ```
 
-## Upgrading from 15.x (mymi14s/frappe_paystack)
+## Upgrading from frappe_paystack 15.x / 16.x (mymi14s/frappe_paystack)
 
-`bench migrate` runs the 16.1 patches:
+This app is the renamed **paystack_frappe** (formerly `frappe_paystack`; module
+"Frappe Paystack" -> "Paystack Frappe"). DocType names, their records, Payment
+Gateways, custom fields and ERPNext documents are untouched; only names that
+name the app change. The upgrade is in place, and keeps every value:
+
+```bash
+bench get-app paystack_frappe https://github.com/ugodspecial/Paystack-Frappe
+bench --site your.site console
+>>> from paystack_frappe.rename_app import adopt_installed_site
+>>> adopt_installed_site()          # {'installed_apps': [...], 'apps_txt': [...]}
+>>> exit()
+bench --site your.site migrate
+# optional, once the site is verified: rm -rf apps/frappe_paystack
+```
+
+(`bench execute` cannot run the adopt step: frappe only resolves methods of
+apps the site already lists, and the site still lists the former name - hence
+the console. Everything else is `bench migrate`.)
+
+`adopt_installed_site` swaps the site's installed-app record and the bench's
+`apps.txt`; the `v17_0.rename_app` patch (pre_model_sync) then renames the
+Module Def - every DocType, report, page, print format, workspace and widget
+follows - and repoints Patch Log entries and Scheduled Job Types, so patch
+history and scheduler state survive. CI proves the whole flow: it installs
+upstream `frappe_paystack` 15.5.0 with ERPNext, seeds its data, adopts the
+renamed app, migrates, and verifies every status and value.
+
+`bench migrate` also runs the 16.1 patches:
 
 * 15.x statuses mixed up what Paystack did with what ERPNext booked. They are now
   split: `Processed` becomes *Paid* with booking *Pending*; `Completed` becomes *Paid*
@@ -292,8 +322,10 @@ paystack_manager_roles = ["My Role"]    # roles that may refund / charge saved c
   no data moves.
 * Refund Log `Completed` becomes `Processed`. Saved cards get `party_type/party` from
   `customer`. Settlements get `booking_status`. Records get their Paystack account.
-* Unchanged: the webhook URL, `/paystack-checkout/<name>` links, the Payment Gateway
-  name `Paystack`, DocType names, and every 15.x whitelisted method path (now shims).
+* Unchanged: `/paystack-checkout/<name>` links, the Payment Gateway name `Paystack`,
+  DocType names, Payment Entries and Journal Entries.
+* The webhook URL changes with the app name; point the Paystack dashboard at
+  `https://your.site/api/method/paystack_frappe.api.paystack_webhook`.
 * Behaviour changes:
   * an unsupported currency is refused instead of being charged as NGN;
   * inline checkout is initialised on the server;
@@ -301,28 +333,48 @@ paystack_manager_roles = ["My Role"]    # roles that may refund / charge saved c
   * the settlement transactions endpoint and payout amounts now follow Paystack's API
     (`/settlement/:id/transactions`; gross is `total_processed`).
 
-CI checks the upgrade: it installs upstream 15.5.0 with ERPNext, seeds its data,
-switches to this code, migrates, and verifies every status and value.
+### No frappe_paystack.* entry points
+
+The 15.x compatibility layer is gone. If you called the old dotted paths, move to:
+
+| 15.x / 16.1 path | paystack_frappe 17 path |
+|---|---|
+| `frappe_paystack.api.paystack_webhook` | `paystack_frappe.api.paystack_webhook` |
+| `frappe_paystack.api.start_checkout` / `verify_checkout` / `get_payment_status` | `paystack_frappe.api.` the same |
+| `frappe_paystack.api.validate_payment_link` (deprecated) | `paystack_frappe.api.get_payment_status` |
+| `frappe_paystack.api.start_hosted_checkout` (deprecated) | `paystack_frappe.api.start_checkout` |
+| `frappe_paystack.api.create_payment_link` | `paystack_frappe.integrations.erpnext.api.create_payment_link` |
+| `frappe_paystack.api.is_enabled_for_company` | `paystack_frappe.integrations.erpnext.api.is_enabled_for_company` |
+| `frappe_paystack.api.saved_cards` | `paystack_frappe.integrations.erpnext.api.saved_cards` |
+| `frappe_paystack.api.charge_saved_card` | `paystack_frappe.integrations.erpnext.api.charge_saved_card` |
+| `frappe_paystack.utils.get_customer_email` | `paystack_frappe.integrations.erpnext.accounts.get_customer_email` |
+| `frappe_paystack.utils.pos_payment.*` | `paystack_frappe.integrations.erpnext.pos.*` |
+| `frappe_paystack.utils.portal.download_payment_receipt` | `paystack_frappe.integrations.erpnext.portal.download_payment_receipt` |
+| `frappe_paystack.utils.reconciliation_api.*` | `paystack_frappe.core.reconciliation_api.*` |
+| `frappe_paystack.utils.sweep.run_sweep` (server code) | `paystack_frappe.core.sweep.run_sweep` |
+| `frappe_paystack.core.*`, `frappe_paystack.integrations.erpnext.*` | the same paths under `paystack_frappe.*` |
+
+Assets also move with the app name (`/assets/paystack_frappe/...`).
 
 ## Development
 
 ```bash
 bench --site test.site set-config allow_tests true
-bench --site test.site run-tests --app frappe_paystack     # suites for absent apps skip themselves
+bench --site test.site run-tests --app paystack_frappe     # suites for absent apps skip themselves
 npm ci && npm test                                         # Vitest (checkout page, ERPNext desk scripts)
 ```
 
 * `tests/core`: install, settings, checkout, webhooks, notifications (run-as), refunds,
-  saved cards, payouts, reconciliation, migration, legacy paths, and the import boundary.
+  saved cards, payouts, reconciliation, migration, the app rename, and the import boundary.
   It needs only Frappe and Payments, and fakes Paystack at `PaystackClient._send`.
 * `tests/lms`, `tests/erpnext`, `tests/education`: these run when those apps are installed.
 * `.github/workflows/ci.yml` runs on MariaDB:
   * core and LMS on Frappe version-15, version-16 and develop;
   * ERPNext + Webshop + Education on version-15 and version-16;
-  * a fresh install as a user would do it (assets built, only frappe_paystack installed,
+  * a fresh install as a user would do it (assets built, only paystack_frappe installed,
     the running site smoke-tested over HTTP, uninstall/reinstall), plus ERPNext installed
     afterwards and removed again;
-  * the 15.5.0 upgrade.
+  * the 15.5.0 upgrade, including the in-place rename to paystack_frappe.
 
   It also runs static checks (including the ERPNext import boundary) and Vitest.
 

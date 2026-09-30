@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { call_reply, install_globals, make_frm, mount_dom, paystack_row } from "./stubs.js";
 
 install_globals();
-const pos = await import("../frappe_paystack/public/js/erpnext/paystack_pos.bundle.js");
+const pos = await import("../paystack_frappe/public/js/erpnext/paystack_pos.bundle.js");
 
 // Lets the promise chains inside announce settle between timer advances.
 async function flush() {
@@ -35,7 +35,7 @@ describe("watch_payment", () => {
 
 		await vi.advanceTimersByTimeAsync(5000);
 		expect(frappe.call).toHaveBeenCalledWith({
-			method: "frappe_paystack.utils.pos_payment.pos_payment_status",
+			method: "paystack_frappe.integrations.erpnext.pos.pos_payment_status",
 			args: { log: "PAY-LOG-0001" },
 		});
 

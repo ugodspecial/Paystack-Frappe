@@ -11,7 +11,7 @@ function refresh(doctype, doc = {}) {
 	const frm = { doc: { doctype, ...doc } };
 	events[doctype].refresh(frm);
 
-	const calls = globalThis.frappe_paystack.actions.setupForm.mock.calls;
+	const calls = globalThis.paystack_frappe.actions.setupForm.mock.calls;
 	return { frm, form: calls.at(-1)[0], config: calls.at(-1)[1] };
 }
 

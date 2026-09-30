@@ -3,7 +3,7 @@
 #
 # Environment:
 #   FRAPPE_BRANCH, PAYMENTS_BRANCH   required
-#   EXTRA_APPS   space-separated "app@branch" pairs installed before frappe_paystack,
+#   EXTRA_APPS   space-separated "app@branch" pairs installed before paystack_frappe,
 #                e.g. "erpnext@version-15 webshop@version-15 education@version-15.2"
 #   PAYSTACK_SOURCE   git URL/branch "url@branch" to install instead of this checkout
 #   PYTHON_BIN   interpreter for the bench virtualenv
@@ -28,11 +28,15 @@ for spec in ${EXTRA_APPS:-}; do
 done
 
 if [ -n "${PAYSTACK_SOURCE:-}" ]; then
-  bench get-app --skip-assets frappe_paystack "${PAYSTACK_SOURCE%@*}" --branch "${PAYSTACK_SOURCE#*@}"
+  # The upgrade CI installs the app under its former name; switch-and-migrate.sh
+  # then adopts the renamed app and the rename patch moves the site.
+  PAYSTACK_APP=frappe_paystack
+  bench get-app --skip-assets "${PAYSTACK_APP}" "${PAYSTACK_SOURCE%@*}" --branch "${PAYSTACK_SOURCE#*@}"
 else
   # actions/checkout leaves a detached HEAD; a branch names the commit under test.
+  PAYSTACK_APP=paystack_frappe
   git -C "${GITHUB_WORKSPACE}" checkout -B ci-run
-  bench get-app --skip-assets frappe_paystack "${GITHUB_WORKSPACE}" --branch ci-run
+  bench get-app --skip-assets "${PAYSTACK_APP}" "${GITHUB_WORKSPACE}" --branch ci-run
 fi
 
 bench new-site --db-root-password root --admin-password admin "${SITE}"
@@ -40,7 +44,7 @@ bench --site "${SITE}" install-app payments
 for spec in ${EXTRA_APPS:-}; do
   bench --site "${SITE}" install-app "${spec%@*}"
 done
-bench --site "${SITE}" install-app frappe_paystack
+bench --site "${SITE}" install-app "${PAYSTACK_APP}"
 bench --site "${SITE}" set-config allow_tests true
 bench --site "${SITE}" list-apps
 

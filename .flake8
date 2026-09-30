@@ -13,4 +13,4 @@ exclude =
     *.egg-info,
     cypress,
     js-tests,
-    frappe_paystack/public/js/vue.global.js
+    paystack_frappe/public/js/vue.global.js

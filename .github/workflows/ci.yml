@@ -28,11 +28,11 @@ jobs:
         with:
           python-version: '3.12'
       - name: Compile on the oldest supported interpreter syntax
-        run: python -m compileall -q frappe_paystack
+        run: python -m compileall -q paystack_frappe
       - name: Undefined names and syntax errors
         run: |
           pip install --quiet "ruff==0.6.9"
-          ruff check --select E9,F63,F7,F82 --target-version py310 frappe_paystack .github/scripts
+          ruff check --select E9,F63,F7,F82 --target-version py310 paystack_frappe .github/scripts
       - name: Dependency boundary (core never imports ERPNext; required_apps = payments)
         run: python .github/scripts/check_boundaries.py
       - name: Merge conflict markers
@@ -62,7 +62,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # E1: Frappe + Payments + frappe_paystack. No ERPNext anywhere.
+          # E1: Frappe + Payments + paystack_frappe. No ERPNext anywhere.
           - env: core
             frappe: version-15
             payments: version-15
@@ -70,7 +70,7 @@ jobs:
             node: 24
             mariadb: '10.6'
             extra_apps: ''
-            expect_apps: frappe payments frappe_paystack
+            expect_apps: frappe payments paystack_frappe
           - env: core
             frappe: version-16
             payments: version-16
@@ -78,7 +78,7 @@ jobs:
             node: 24
             mariadb: '11.8'
             extra_apps: ''
-            expect_apps: frappe payments frappe_paystack
+            expect_apps: frappe payments paystack_frappe
           - env: core
             frappe: develop
             payments: develop
@@ -86,7 +86,7 @@ jobs:
             node: 24
             mariadb: '11.8'
             extra_apps: ''
-            expect_apps: frappe payments frappe_paystack
+            expect_apps: frappe payments paystack_frappe
           # E2: + LMS (still no ERPNext).
           - env: lms
             frappe: version-15
@@ -95,7 +95,7 @@ jobs:
             node: 24
             mariadb: '10.6'
             extra_apps: lms@version-15
-            expect_apps: frappe payments lms frappe_paystack
+            expect_apps: frappe payments lms paystack_frappe
           - env: lms
             frappe: version-16
             payments: version-16
@@ -103,7 +103,7 @@ jobs:
             node: 24
             mariadb: '11.8'
             extra_apps: lms@version-16
-            expect_apps: frappe payments lms frappe_paystack
+            expect_apps: frappe payments lms paystack_frappe
           - env: lms
             frappe: develop
             payments: develop
@@ -111,7 +111,7 @@ jobs:
             node: 24
             mariadb: '11.8'
             extra_apps: lms@develop
-            expect_apps: frappe payments lms frappe_paystack
+            expect_apps: frappe payments lms paystack_frappe
           # E3 + E4: ERPNext (+ Webshop) + Education.
           - env: erpnext
             frappe: version-15
@@ -120,7 +120,7 @@ jobs:
             node: 24
             mariadb: '10.6'
             extra_apps: erpnext@version-15 webshop@version-15 education@version-15.2
-            expect_apps: frappe payments erpnext webshop education frappe_paystack
+            expect_apps: frappe payments erpnext webshop education paystack_frappe
           - env: erpnext
             frappe: version-16
             payments: version-16
@@ -128,7 +128,7 @@ jobs:
             node: 24
             mariadb: '11.8'
             extra_apps: erpnext@version-16 webshop@version-16 education@version-16
-            expect_apps: frappe payments erpnext webshop education frappe_paystack
+            expect_apps: frappe payments erpnext webshop education paystack_frappe
 
     env:
       CI: 'Yes'
@@ -186,7 +186,7 @@ jobs:
           bench --site test_site migrate 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
           bench --site test_site migrate 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
 
-      - name: Run the frappe_paystack suite
+      - name: Run the paystack_frappe suite
         run: bash .github/scripts/run-tests.sh ~/frappe-bench test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
 
       - name: Show bench logs
@@ -256,7 +256,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-      - name: Install like a user (assets built; only frappe_paystack installed explicitly)
+      - name: Install like a user (assets built; only paystack_frappe installed explicitly)
         env:
           PYTHON_BIN: ${{ steps.python.outputs.python-path }}
         run: bash .github/scripts/fresh-install.sh 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
@@ -273,7 +273,7 @@ jobs:
         run: python3 .github/scripts/annotate_failure.py "${RUNNER_TEMP}/ci.log" /home/runner/frappe-bench/logs
 
   upgrade:
-    name: Upgrade from upstream 15.5.0 (ERPNext, frappe version-15)
+    name: Upgrade + in-place rename from upstream frappe_paystack 15.5.0 (ERPNext, frappe version-15)
     needs: [static]
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -282,6 +282,8 @@ jobs:
       FRAPPE_BRANCH: version-15
       PAYMENTS_BRANCH: version-15
       EXTRA_APPS: erpnext@version-15
+      # Upstream still ships as frappe_paystack; the switch-and-migrate step
+      # adopts the renamed app and proves the data-preserving rename patch.
       PAYSTACK_SOURCE: https://github.com/mymi14s/frappe_paystack@version-15
       CYPRESS_INSTALL_BINARY: '0'
     services:
@@ -320,9 +322,9 @@ jobs:
       - name: Seed 15.5.0-shaped data
         working-directory: /home/runner/frappe-bench/sites
         run: ../env/bin/python "${GITHUB_WORKSPACE}/.github/scripts/upgrade_seed.py" test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
-      - name: Switch the app to this commit and migrate
+      - name: Switch to the renamed app (adopt_installed_site) and migrate
         run: bash .github/scripts/switch-and-migrate.sh ~/frappe-bench test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
-      - name: Verify statuses and preserved ERPNext data
+      - name: Verify the rename and the preserved 15.5.0 data
         working-directory: /home/runner/frappe-bench/sites
         run: ../env/bin/python "${GITHUB_WORKSPACE}/.github/scripts/upgrade_verify.py" test_site 2>&1 | tee -a "${RUNNER_TEMP}/ci.log"
       - name: Show bench logs

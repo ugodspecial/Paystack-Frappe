@@ -1,5 +1,37 @@
 # Changelog
 
+## 17.0.0 (unreleased)
+
+### Renamed app
+
+- The app is renamed `frappe_paystack` -> `paystack_frappe` (app title and module
+  "Frappe Paystack" -> "Paystack Frappe", module folder `paystack_frappe/paystack_frappe`).
+  Doctype names, their data, Payment Gateways, custom fields and ERPNext documents are untouched.
+- The 15.x compatibility layer is gone: no `frappe_paystack.*` import paths, whitelisted
+  endpoints or scheduled jobs remain. The `paystack_frappe.utils` facade, `paystack_frappe.events`,
+  `paystack_frappe.setup`, the deprecated checkout endpoints (`validate_payment_link`,
+  `start_hosted_checkout`) and the ERPNext shims in `paystack_frappe.api` are dropped; the
+  endpoints now live at their real homes (`paystack_frappe.integrations.erpnext.api`,
+  `.pos`, `.portal`, `.accounts`, `paystack_frappe.core.reconciliation_api`).
+- One in-place patch (`paystack_frappe.patches.v17_0.rename_app`) renames the Module Def,
+  repoints Patch Log entries and Scheduled Job Types, so a site keeps its data, patch
+  history and scheduler state. CI proves it: the upgrade job installs upstream
+  `mymi14s/frappe_paystack` 15.5.0, seeds data, adopts the renamed app and migrates.
+
+### Upgrading from frappe_paystack
+
+1. `bench get-app paystack_frappe https://github.com/ugodspecial/Paystack-Frappe`
+2. `bench --site your.site console`, then
+   `from paystack_frappe.rename_app import adopt_installed_site; adopt_installed_site()`
+3. `bench --site your.site migrate`
+4. (optional) remove the old app: `rm -rf apps/frappe_paystack`
+
+(`bench execute` cannot run step 2: frappe only resolves methods of apps the site
+already lists, and the site still lists the former name.) The adopt step swaps the
+site's installed-app record and `apps.txt`; `bench migrate` then renames the module
+and repoints patch/scheduler rows. All `frappe_paystack.*` HTTP endpoints stop
+working in this release - update integrations to the new dotted paths (see the
+README table).
 ## 16.1.0 (unreleased)
 
 ### Architecture

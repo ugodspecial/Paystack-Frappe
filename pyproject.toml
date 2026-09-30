@@ -1,5 +1,5 @@
 [project]
-name = "frappe_paystack"
+name = "paystack_frappe"
 authors = [
     { name = "Anthony Emmanuel", email = "mymi14s@hotmail.com"}
 ]
@@ -20,7 +20,7 @@ build-backend = "flit_core.buildapi"
 frappe = ">=15.0.0,<18.0.0"
 # payments tags no release series; this floor checks the app is present.
 payments = ">=0.0.1"
-# ERPNext is optional: frappe_paystack.integrations.erpnext activates itself
+# ERPNext is optional: paystack_frappe.integrations.erpnext activates itself
 # when ERPNext is installed (version-15 and version-16 are tested).
 
 # These dependencies are only installed when developer mode is enabled
@@ -36,7 +36,7 @@ extend-exclude = '''
 /(
     node_modules
   | \.git
-  | frappe_paystack/public/js
+  | paystack_frappe/public/js
 )/
 '''
 
@@ -44,7 +44,7 @@ extend-exclude = '''
 profile = "black"
 line_length = 110
 known_third_party = ["frappe"]
-known_first_party = ["frappe_paystack"]
+known_first_party = ["paystack_frappe"]
 # erpnext sorts into its own trailing block.
 known_local_folder = ["erpnext"]
 skip = ["node_modules", ".git"]
@@ -112,7 +112,7 @@ warn_return_any = false
 warn_unused_ignores = false
 # Both www page folders are hyphenated, so each index.py maps to the module
 # name "index". Excluding one leaves the other collectable.
-exclude = "(www/paystack-checkout|frappe_paystack/tests/)"
+exclude = "(www/paystack-checkout|paystack_frappe/tests/)"
 # frappe and erpnext ship no type information, so every call yields Any.
 disable_error_code = [
     "attr-defined",

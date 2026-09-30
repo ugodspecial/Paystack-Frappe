@@ -1,5 +1,8 @@
 """
-Verify a 15.5.0 site after `bench migrate` to this code (see upgrade_seed.py).
+Verify a 15.5.0 site after the switch to the renamed app and `bench migrate`
+(see upgrade_seed.py): every seeded row keeps its values, and the site itself
+now runs paystack_frappe - module, patch history, scheduler rows - with no
+frappe_paystack rows left behind.
 Usage (from sites/): ../env/bin/python upgrade_verify.py <site>
 """
 
@@ -17,6 +20,50 @@ def expect(label, actual, expected):
     if actual != expected:
         failures.append(f"{label}: expected {expected!r}, got {actual!r}")
 
+
+# --- the rename itself: the site runs the renamed app, nothing names the old one
+expect("installed apps", "paystack_frappe" in frappe.get_installed_apps(), True)
+expect("former app installed", "frappe_paystack" in frappe.get_installed_apps(), False)
+expect("module renamed", bool(frappe.db.exists("Module Def", "Paystack Frappe")), True)
+expect("former module gone", bool(frappe.db.exists("Module Def", "Frappe Paystack")), False)
+module = frappe.db.get_value("Module Def", "Paystack Frappe", ["module_name", "app_name"], as_dict=True)
+expect("module_name", module.module_name, "Paystack Frappe")
+expect("module app_name", module.app_name, "paystack_frappe")
+for doctype in ("Paystack Payment Log", "Paystack Gateway Setting", "Paystack Settlement"):
+    expect(f"{doctype} module", frappe.db.get_value("DocType", doctype, "module"), "Paystack Frappe")
+expect("workspace module", frappe.db.get_value("Workspace", "Paystack Dashboard", "module"), "Paystack Frappe")
+expect("report module", frappe.db.get_value("Report", "Paystack Activity", "module"), "Paystack Frappe")
+expect("card module", frappe.db.get_value("Number Card", "Paystack Failed Payments", "module"), "Paystack Frappe")
+
+expect(
+    "patch logs of the former app",
+    frappe.get_all("Patch Log", filters={"patch": ["like", "frappe_paystack.%"]}, pluck="patch"),
+    [],
+)
+for patch in (
+    "paystack_frappe.patches.v17_0.rename_app",
+    "paystack_frappe.patches.v16_1.migrate_payment_statuses",
+    "paystack_frappe.patches.v16_1.register_payment_gateways",
+):
+    expect(f"patch log {patch}", bool(frappe.db.get_value("Patch Log", {"patch": patch, "skipped": 0}, "name")), True)
+expect(
+    "scheduled jobs of the former app",
+    frappe.get_all("Scheduled Job Type", filters={"method": ["like", "frappe_paystack.%"]}, pluck="method"),
+    [],
+)
+for method in (
+    "paystack_frappe.core.sweeps.run_daily_reconciliation",
+    "paystack_frappe.integrations.erpnext.settlement.retry_unposted_settlements",
+):
+    expect(f"scheduled job {method}", bool(frappe.db.exists("Scheduled Job Type", {"method": method})), True)
+expect(
+    "renamed job keeps its state",
+    frappe.db.get_value("Scheduled Job Type", {"method": "frappe_paystack.utils.settlement.retry_unposted_settlements"}, "name"),
+    None,
+)
+expect("scheduler rows for this app", len(frappe.get_all("Scheduled Job Type", filters={"method": ["like", "paystack_frappe.%"]}, pluck="name")) >= 4, True)
+
+# --- the seeded 15.5.0 data, kept through the 16.1 migration and the rename
 
 log = "Paystack Payment Log"
 expected = {

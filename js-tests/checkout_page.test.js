@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const SOURCE = fs.readFileSync(path.resolve(process.cwd(), "frappe_paystack/public/js/paystack_checkout.js"), "utf8");
+const SOURCE = fs.readFileSync(path.resolve(process.cwd(), "paystack_frappe/public/js/paystack_checkout.js"), "utf8");
 
 let calls;
 let replies;
@@ -81,14 +81,14 @@ describe("checkout page", () => {
 	});
 
 	it("starts on the server and resumes the transaction inline", async () => {
-		replies["frappe_paystack.api.start_checkout"] = { mode: "Inline", access_code: "ac_S1", reference: "S1" };
-		replies["frappe_paystack.api.verify_checkout"] = { status: "Paid", redirect: "/payment-success?x=1" };
+		replies["paystack_frappe.api.start_checkout"] = { mode: "Inline", access_code: "ac_S1", reference: "S1" };
+		replies["paystack_frappe.api.verify_checkout"] = { status: "Paid", redirect: "/payment-success?x=1" };
 		mount({ reference: "S1", needs_email: false, email: "payer@example.com" });
 		click();
 		await flush();
 
 		expect(calls[0]).toEqual({
-			method: "frappe_paystack.api.start_checkout",
+			method: "paystack_frappe.api.start_checkout",
 			args: { reference: "S1", email: "payer@example.com", origin: "http://erp.localhost:8000" },
 			type: "POST",
 		});
@@ -98,14 +98,14 @@ describe("checkout page", () => {
 
 		popup.callbacks.onSuccess({ reference: "S1" });
 		await flush();
-		expect(calls[1].method).toBe("frappe_paystack.api.verify_checkout");
+		expect(calls[1].method).toBe("paystack_frappe.api.verify_checkout");
 		expect(calls[1].args.transaction_reference).toBe("S1");
 		expect(calls[1].args.origin).toBe("http://erp.localhost:8000");
 		expect(redirect).toBe("/payment-success?x=1");
 	});
 
 	it("redirects to Paystack in hosted mode", async () => {
-		replies["frappe_paystack.api.start_checkout"] = {
+		replies["paystack_frappe.api.start_checkout"] = {
 			mode: "Hosted",
 			authorization_url: "https://checkout.paystack.com/ac_S2",
 		};
@@ -117,7 +117,7 @@ describe("checkout page", () => {
 	});
 
 	it("re-enables the button when the payer cancels", async () => {
-		replies["frappe_paystack.api.start_checkout"] = { mode: "Inline", access_code: "ac_S3", reference: "S3" };
+		replies["paystack_frappe.api.start_checkout"] = { mode: "Inline", access_code: "ac_S3", reference: "S3" };
 		mount({ reference: "S3", needs_email: false, email: "payer@example.com" });
 		click();
 		await flush();
@@ -127,8 +127,8 @@ describe("checkout page", () => {
 	});
 
 	it("reports a failed verification without redirecting", async () => {
-		replies["frappe_paystack.api.start_checkout"] = { mode: "Inline", access_code: "ac_S4", reference: "S4" };
-		replies["frappe_paystack.api.verify_checkout"] = { status: "Failed", redirect: null };
+		replies["paystack_frappe.api.start_checkout"] = { mode: "Inline", access_code: "ac_S4", reference: "S4" };
+		replies["paystack_frappe.api.verify_checkout"] = { status: "Failed", redirect: null };
 		mount({ reference: "S4", needs_email: false, email: "payer@example.com" });
 		click();
 		await flush();
@@ -146,7 +146,7 @@ describe("checkout page", () => {
 				},
 			};
 		};
-		replies["frappe_paystack.api.start_checkout"] = {
+		replies["paystack_frappe.api.start_checkout"] = {
 			mode: "Inline",
 			access_code: "ac_S6",
 			authorization_url: "https://checkout.paystack.com/ac_S6",
@@ -159,7 +159,7 @@ describe("checkout page", () => {
 
 	it("falls back to the hosted page when the Paystack script is unavailable", async () => {
 		delete globalThis.PaystackPop;
-		replies["frappe_paystack.api.start_checkout"] = {
+		replies["paystack_frappe.api.start_checkout"] = {
 			mode: "Inline",
 			access_code: "ac_S5",
 			authorization_url: "https://checkout.paystack.com/ac_S5",
