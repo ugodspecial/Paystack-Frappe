@@ -5,6 +5,14 @@ A site named `erp.localhost` is reached at `http://erp.localhost:8000`; nginx
 forwards `Host` without the port. A link built from the bare site name sends
 the payer to `http://erp.localhost`, which refuses the connection - the blank
 "erp.localhost refused to connect" page instead of the checkout.
+
+The host names below (`erp.localhost`, `learn.localhost`, `pay.example.test`)
+are *fixtures*, not configuration: `browsing()` fabricates the incoming HTTP
+request, so each test says "a browser at this address asked for a link" and
+checks what came back. Nothing in the app stores or recognises them -
+`site_hosts()` reads the site it is running on - and
+`test_any_site_on_any_port_keeps_its_port` proves it, using the name of
+whatever site the suite is run against.
 """
 
 from contextlib import contextmanager
@@ -101,6 +109,17 @@ class TestCheckoutUrls(PaystackTestCase):
             self.assertEqual(site_url("/x"), "http://erp.localhost/x")
             remember_origin("http://erp.localhost:8080")
             self.assertEqual(site_url("/x"), "http://erp.localhost:8080/x")
+
+    def test_any_site_on_any_port_keeps_its_port(self):
+        """
+        No host name is hard-coded anywhere: the link follows the site the
+        request is for. Run on a fresh `shop.example.org` or `mysite.local`
+        behind :9017 and the link is that site on :9017.
+        """
+        site = frappe.local.site  # whatever site this suite is run against
+        for port in ("8080", "9017", "3000"):
+            with browsing(f"http://{site}/billing", {"Origin": f"http://{site}:{port}"}):
+                self.assertEqual(site_url("/x"), f"http://{site}:{port}/x")
 
     def test_the_origin_header_restores_a_port_the_proxy_dropped(self):
         """
