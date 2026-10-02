@@ -380,3 +380,56 @@ export function checkout_payload(overrides = {}) {
 export function flush() {
 	return new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+// The Gateway Setting form script, read off disk the same way.
+const GATEWAY_SETTING_FORM_SOURCE = fs.readFileSync(
+	path.resolve(
+		process.cwd(),
+		"paystack_frappe/paystack_frappe/doctype/paystack_gateway_setting/paystack_gateway_setting.js"
+	),
+	"utf8"
+);
+
+/** Evaluate the Gateway Setting form script and return the handlers it registered. */
+export function load_gateway_setting_form() {
+	recorded.form_events = {};
+	globalThis.frappe.ui.form = {
+		on: (name, events) => {
+			recorded.form_events[name] = events;
+		},
+	};
+
+	// eslint-disable-next-line no-new-func
+	new Function(GATEWAY_SETTING_FORM_SOURCE)();
+	return recorded.form_events["Paystack Gateway Setting"];
+}
+
+/** Build a Gateway Setting form, returning it with the HTML its help field got. */
+export function make_gateway_setting_frm(onload = {}, origin) {
+	if (origin) {
+		window.location.origin = origin;
+		window.location.hostname = new URL(origin).hostname;
+	} else if (!window.location.hostname) {
+		window.location.hostname = new URL(window.location.origin).hostname;
+	}
+
+	const events = load_gateway_setting_form();
+	const rendered = { html: "" };
+	const frm = {
+		doc: { doctype: "Paystack Gateway Setting", name: "Paystack", __onload: onload },
+		is_new: () => false,
+		add_custom_button: vi.fn(),
+		call: vi.fn(() => Promise.resolve({ message: { ok: true, message: "fine" } })),
+		get_field: () => ({
+			$wrapper: {
+				html: (markup) => {
+					rendered.html = markup;
+				},
+			},
+		}),
+		trigger: (name) => events[name](frm),
+	};
+
+	events.refresh(frm);
+	return { events, frm, rendered };
+}

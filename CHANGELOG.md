@@ -27,6 +27,12 @@
   `http://learn.localhost:8080/paystack-checkout/<id>` instead of
   `http://learn.localhost/paystack-checkout/<id>`. A reported origin is still
   accepted only for one of the site's own hosts.
+- **The webhook URL shown on a Paystack Gateway Setting keeps the port too.**
+  The desk page now builds it from the address the administrator's browser is
+  on (`http://erp.localhost:8080/api/method/...paystack_webhook`), instead of
+  whatever the proxy left of `Host`. A pinned `host_name` on another host is
+  still shown as-is - that is the public address Paystack must call - and an
+  address on your own machine now says so, with the tunnel hint.
 - Payments made with Paystack's **Pass fees automatically** (the customer pays the
   transaction fee on top of the listed amount, the merchant nets the listed amount)
   are marked **Paid** instead of *Needs Attention*: the verifier accepts a capture
