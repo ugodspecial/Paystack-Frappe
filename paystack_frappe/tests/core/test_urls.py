@@ -5,6 +5,14 @@ A site named `erp.localhost` is reached at `http://erp.localhost:8000`; nginx
 forwards `Host` without the port. A link built from the bare site name sends
 the payer to `http://erp.localhost`, which refuses the connection - the blank
 "erp.localhost refused to connect" page instead of the checkout.
+
+The host names below (`erp.localhost`, `learn.localhost`, `pay.example.test`)
+are *fixtures*, not configuration: `browsing()` fabricates the incoming HTTP
+request, so each test says "a browser at this address asked for a link" and
+checks what came back. Nothing in the app stores or recognises them -
+`site_hosts()` reads the site it is running on - and
+`test_any_site_on_any_port_keeps_its_port` proves it, using the name of
+whatever site the suite is run against.
 """
 
 from contextlib import contextmanager
@@ -101,6 +109,79 @@ class TestCheckoutUrls(PaystackTestCase):
             self.assertEqual(site_url("/x"), "http://erp.localhost/x")
             remember_origin("http://erp.localhost:8080")
             self.assertEqual(site_url("/x"), "http://erp.localhost:8080/x")
+
+    def test_any_site_on_any_port_keeps_its_port(self):
+        """
+        No host name is hard-coded anywhere: the link follows the site the
+        request is for. Run on a fresh `shop.example.org` or `mysite.local`
+        behind :9017 and the link is that site on :9017.
+        """
+        site = frappe.local.site  # whatever site this suite is run against
+        for port in ("8080", "9017", "3000"):
+            with browsing(f"http://{site}/billing", {"Origin": f"http://{site}:{port}"}):
+                self.assertEqual(site_url("/x"), f"http://{site}:{port}/x")
+
+    def test_the_origin_header_restores_a_port_the_proxy_dropped(self):
+        """
+        ERPNext and LMS call get_payment_url() themselves, with no `origin`
+        argument: the payer's port only survives in the browser's own headers.
+        """
+        with browsing(
+            "http://learn.localhost/api/method/lms.lms.payments.get_payment_link",
+            {"Origin": "http://learn.localhost:8080"},
+        ):
+            self.assertEqual(site_url("/x"), "http://learn.localhost:8080/x")
+
+    def test_the_referer_restores_the_port_on_a_plain_page_load(self):
+        with browsing(
+            "http://learn.localhost/billing",
+            {"Referer": "http://learn.localhost:8080/courses/python/checkout"},
+        ):
+            self.assertEqual(site_url("/x"), "http://learn.localhost:8080/x")
+
+    def test_a_reported_origin_never_overrides_a_port_that_did_arrive(self):
+        with browsing("http://erp.localhost:8000/app", {"Origin": "http://erp.localhost:9999"}):
+            self.assertEqual(site_url("/x"), "http://erp.localhost:8000/x")
+
+    def test_a_reported_origin_on_another_host_is_ignored(self):
+        with browsing("http://erp.localhost/app", {"Origin": "https://phishing.example.com:8080"}):
+            self.assertEqual(site_url("/x"), "http://erp.localhost/x")
+        with browsing(
+            "http://erp.localhost/app", {"Referer": "http://user:pass@erp.localhost:8080/x"}
+        ):
+            self.assertEqual(site_url("/x"), "http://erp.localhost/x")
+
+    def test_the_origin_header_keeps_https_when_the_proxy_forgets_it(self):
+        with browsing("http://pay.example.test/app", {"Origin": "https://pay.example.test"}):
+            self.assertEqual(site_url("/x"), "https://pay.example.test/x")
+
+    def test_an_https_request_is_never_downgraded_by_the_origin_header(self):
+        with browsing(
+            "http://frontend/app",
+            {
+                "X-Forwarded-Host": "pay.example.test",
+                "X-Forwarded-Proto": "https",
+                "Origin": "http://pay.example.test",
+            },
+        ):
+            self.assertEqual(site_url("/x"), "https://pay.example.test/x")
+
+    def test_a_pinned_host_name_missing_the_port_is_corrected_by_the_header(self):
+        with browsing(
+            "http://learn.localhost/billing",
+            {"Origin": "http://learn.localhost:8080"},
+            host_name="http://learn.localhost",
+        ):
+            self.assertEqual(site_url("/x"), "http://learn.localhost:8080/x")
+
+    def test_a_consumer_payment_url_keeps_the_browser_port(self):
+        """What ERPNext's Payment Request and LMS get back from get_payment_url."""
+        with browsing(
+            "http://learn.localhost/api/method/run_doc_method",
+            {"Origin": "http://learn.localhost:8080"},
+        ):
+            url = self.payment_url()
+            self.assertTrue(url.startswith("http://learn.localhost:8080/paystack-checkout/"), url)
 
     def test_an_origin_on_another_host_is_refused(self):
         with browsing("http://erp.localhost:8000/app"):

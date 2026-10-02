@@ -26,7 +26,12 @@ So a browser-facing URL is built from, in order:
    link - or a Paystack `callback_url` - somewhere else. On the host the site
    is published at, it is what corrects a missing port;
 3. the live request (`X-Forwarded-Host` / `X-Forwarded-Port` /
-   `X-Forwarded-Proto`, then the Host header), port kept;
+   `X-Forwarded-Proto`, then the Host header), port kept - and, when that
+   leaves no port (the nginx `Host $host` case), completed with the port the
+   browser itself named in `Origin`/`Referer`. Consumers such as ERPNext's
+   Payment Request and LMS call `get_payment_url()` themselves, without an
+   `origin` argument, so those two headers are the only place the payer's real
+   port appears on such a request;
 4. `frappe.utils.get_url()`, for background jobs, the scheduler and
    `bench execute`.
 
@@ -119,6 +124,32 @@ def site_hosts() -> Set[str]:
     return {host for host in (_hostname(value) for value in candidates) if host}
 
 
+def _reported_origin() -> str:
+    """
+    `scheme://host[:port]` as the browser itself wrote it, from `Origin` or
+    `Referer`, or "" when neither header carries a usable absolute URL.
+
+    Both headers are set by the browser and, unlike `Host`, survive an nginx
+    `proxy_set_header Host $host` with their port intact. `Origin` is sent on
+    the XHR/fetch calls the portal and the desk make; `Referer` covers an
+    ordinary page load (the "Pay with Paystack" button of ERPNext or LMS).
+    """
+    for name in ("Origin", "Referer"):
+        value = _header(name)
+        if not value or value.lower() == "null":
+            continue
+        try:
+            parts = urlsplit(value)
+        except ValueError:
+            continue
+        scheme = (parts.scheme or "").lower()
+        netloc = parts.netloc
+        # Credentials in a reported origin are never legitimate here.
+        if scheme in SCHEMES and netloc and "@" not in netloc:
+            return f"{scheme}://{netloc.lower()}"
+    return ""
+
+
 def request_origin() -> Optional[str]:
     """`scheme://host[:port]` of the request being served, or None outside one."""
     request = getattr(frappe.local, "request", None)
@@ -138,7 +169,20 @@ def request_origin() -> Optional[str]:
         if port.isdigit() and port != DEFAULT_PORTS[scheme]:
             host = f"{host}:{port}"
 
-    return f"{scheme}://{host.lower()}"
+    host = host.lower()
+    reported = _reported_origin()
+    # Only the browser's own view of *this* host may complete what the proxy
+    # dropped: the port it is really on, and https when X-Forwarded-Proto is
+    # missing. A reported origin on another host is ignored outright, so it
+    # can never aim a payment link somewhere else.
+    if reported and _hostname(reported) == _hostname(host):
+        reported_scheme, _, reported_host = reported.partition("://")
+        if not _has_port(host) and _has_port(reported_host):
+            host = reported_host
+        if scheme == "http" and reported_scheme == "https":
+            scheme = "https"
+
+    return f"{scheme}://{host}"
 
 
 def normalise_origin(origin: Optional[str]) -> Optional[str]:
