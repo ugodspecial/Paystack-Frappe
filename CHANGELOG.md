@@ -19,6 +19,14 @@
   `mymi14s/frappe_paystack` 15.5.0, seeds data, adopts the renamed app and migrates.
 
 ### Fixed
+- **"Pay with Paystack" no longer drops the port** of the site's address. When a
+  proxy forwards `Host` without a port (frappe_docker's nginx, `proxy_set_header
+  Host $host`) and sends no `X-Forwarded-Port`, the port is now read from the
+  browser's `Origin`/`Referer` header, so ERPNext and LMS - which call
+  `get_payment_url()` themselves, with no origin argument - send the payer to
+  `http://learn.localhost:8080/paystack-checkout/<id>` instead of
+  `http://learn.localhost/paystack-checkout/<id>`. A reported origin is still
+  accepted only for one of the site's own hosts.
 - Payments made with Paystack's **Pass fees automatically** (the customer pays the
   transaction fee on top of the listed amount, the merchant nets the listed amount)
   are marked **Paid** instead of *Needs Attention*: the verifier accepts a capture

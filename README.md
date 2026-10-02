@@ -91,8 +91,14 @@ port 80. Redirects after a payment are relative (`/payment-success?...`), so the
 keeps the origin - and the scheme - they came in on, and an https site never drops to
 http.
 
+When a proxy forwards `Host` without the port and sends no `X-Forwarded-Port`, the
+port is taken from the browser's own `Origin` (or `Referer`) header. That covers the
+consumers that build a payment link themselves - ERPNext's Payment Request, LMS's
+"Pay with Paystack" - which call `get_payment_url()` without reporting an origin.
+
 A reported origin is used only when its host is one of the site's own hosts, so a
-forged `Host` or `origin` header cannot aim a payment link somewhere else.
+forged `Host`, `Origin` or `origin` header cannot aim a payment link somewhere else;
+it can only add the missing port (or keep https) for the host already being served.
 
 The only links built with no browser in the loop - emails sent by a background worker,
 the scheduler, `bench execute` - fall back to Frappe's `get_url()`. If those come out
